@@ -61,6 +61,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 .role-admin { color: #bf616a; font-weight: 600; }
 .role-staff { color: #5e81ac; font-weight: 600; }
 .role-intervention { color: #b48ead; font-weight: 600; }
+.risk-high { background: #bf616a; color: #fff; }
+.risk-medium { background: #ebcb8b; color: #4c566a; }
+.risk-low { background: #a3be8c; color: #fff; }
+.notif-dropdown { min-width: 360px; max-height: 480px; overflow-y: auto; }
+.notif-item { padding: 12px; border-bottom: 1px solid #e5e9f0; cursor: pointer; transition: background .2s; }
+.notif-item:hover { background: #f8fafc; }
+.notif-item.unread { background: #f0f4f8; }
+.notif-item.unread:hover { background: #e8eef5; }
+.nav-badge { position: absolute; top: -2px; right: -2px; }
 .schedule-tag { background: #eceff4; padding: 4px 8px; border-radius: 6px; font-size: 12px; display: inline-block; margin: 2px; }
 .appointment-card { border: 1px solid #e5e9f0; border-radius: 10px; padding: 14px; margin-bottom: 10px; background: #fff; transition: all .2s; }
 .appointment-card:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(94,129,172,0.1); }
@@ -117,6 +126,54 @@ function openModal(title, bodyHtml, size) {
   document.getElementById(id).addEventListener('hidden.bs.modal', function(e){ document.getElementById(id).remove(); });
   return id;
 }
+function loadNotifications() {
+  fetch('/api/notifications?unread=1&limit=10')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var count = data.unread_count || 0;
+      var badge = document.getElementById('topbar-notif-badge');
+      var navBadge = document.getElementById('nav-notif-badge');
+      if (badge) {
+        if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.style.display = 'inline-block'; }
+        else { badge.style.display = 'none'; }
+      }
+      if (navBadge) {
+        if (count > 0) { navBadge.innerHTML = '<span class="badge bg-danger" style="font-size:10px;position:absolute;top:6px;right:10px;">'+(count>99?'99+':count)+'</span>'; }
+        else { navBadge.innerHTML = ''; }
+      }
+      var list = document.getElementById('notif-list');
+      if (list) {
+        var notifs = data.notifications || [];
+        if (notifs.length === 0) {
+          list.innerHTML = '<div class="text-center py-4 text-secondary small"><i class="bi bi-check2-circle" style="font-size:24px;"></i><div class="mt-2">暂无未读消息</div></div>';
+        } else {
+          var html = '';
+          notifs.forEach(function(n){
+            var iconClass = n.notification_type === 'risk_warning' ? 'bi-exclamation-triangle text-warning' :
+                            n.notification_type === 'checkin_anomaly' ? 'bi-clock text-danger' : 'bi-info-circle text-info';
+            html += '<div class="notif-item '+(n.is_read?'':'unread')+'" onclick="markNotifRead('+n.id+')">' +
+                     '<div class="d-flex gap-2"><i class="bi '+iconClass+'" style="font-size:18px;margin-top:2px;"></i>' +
+                     '<div class="flex-grow-1"><div style="font-weight:600;font-size:13px;">'+n.title+'</div>' +
+                     '<div style="font-size:12px;color:#7b88a1;margin-top:2px;line-height:1.4;">'+(n.content||'')+'</div>' +
+                     '<div style="font-size:11px;color:#a7b0c2;margin-top:4px;">'+(n.created_at||'')+'</div></div></div></div>';
+          });
+          list.innerHTML = html;
+        }
+      }
+    })
+    .catch(function(e){ console.error(e); });
+}
+function markNotifRead(id) {
+  fetch('/api/notifications/read', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({notification_id: id})
+  }).then(function(){ loadNotifications(); });
+}
+document.addEventListener('DOMContentLoaded', function(){
+  loadNotifications();
+  setInterval(loadNotifications, 60000);
+});
 </script>
 </head>
 <body>
@@ -135,7 +192,9 @@ function openModal(title, bodyHtml, size) {
     <li class="nav-item"><a href="/counselors" class="nav-link {% if nav == 'counselors' %}active{% endif %}"><i class="bi bi-people"></i> 咨询师管理</a></li>
     <li class="nav-item"><a href="/schedules" class="nav-link {% if nav == 'schedules' %}active{% endif %}"><i class="bi bi-calendar-week"></i> 排班管理</a></li>
     <li class="nav-item"><a href="/interventions" class="nav-link {% if nav == 'interventions' %}active{% endif %}"><i class="bi bi-exclamation-triangle"></i> 失约与干预</a></li>
-    <li class="nav-item"><a href="/analytics" class="nav-link {% if nav == 'analytics' %}active{% endif %}"><i class="bi bi-bar-chart-line"></i> 周度分析</a></li>
+    <li class="nav-item"><a href="/analytics" class="nav-link {% if nav == 'analytics' %}active{% endif %}"><i class="bi bi-bar-chart-line"></i> 分析报表</a></li>
+    <li class="nav-item"><a href="/risk-warnings" class="nav-link {% if nav == 'risk' %}active{% endif %}"><i class="bi bi-exclamation-triangle-fill"></i> 风险预警</a></li>
+    <li class="nav-item"><a href="/notifications" class="nav-link {% if nav == 'notifications' %}active{% endif %}" style="position:relative;"><i class="bi bi-bell"></i> 消息通知 <span id="nav-notif-badge"></span></a></li>
   </ul>
   <div class="px-3 py-3 mt-3 border-top border-white border-opacity-10">
     <a href="/anonymous/book" target="_blank" class="nav-link text-light" style="opacity:0.85;font-size:13px;"><i class="bi bi-box-arrow-up-right"></i> 匿名预约入口</a>
@@ -145,6 +204,18 @@ function openModal(title, bodyHtml, size) {
   <div class="topbar">
     <div><h5 class="mb-0 text-secondary" style="font-size:14px;">{% block page_title %}工作台{% endblock %}</h5></div>
     <div class="d-flex align-items-center gap-3">
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="bi bi-bell"></i>
+          <span id="topbar-notif-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:9px;display:none;">0</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end notif-dropdown" id="notif-dropdown">
+          <li><h6 class="dropdown-header">消息通知</h6></li>
+          <li><div id="notif-list"><div class="text-center py-3 text-secondary small"><div class="spinner-border spinner-border-sm me-2"></div>加载中...</div></div></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item text-center" href="/notifications">查看全部通知</a></li>
+        </ul>
+      </div>
       <div class="d-flex align-items-center">
         <div class="me-2">
           <div class="rounded-circle d-inline-flex align-items-center justify-content-center text-white" style="width:34px;height:34px;background:{{ {'admin':'#bf616a','staff':'#5e81ac','intervention':'#b48ead'}[user.role] }};">

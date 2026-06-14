@@ -12,8 +12,14 @@
           {% for v,l in opt %}<option value="{{ v }}" {% if status==v %}selected{% endif %}>{{ l }}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-md-4"><label class="form-label" style="font-size:13px;">搜索</label><input type="text" class="form-control" name="q" value="{{ q }}" placeholder="匿名码 / 预约号 / 咨询师"></div>
-      <div class="col-md-2"><button type="submit" class="btn btn-primary-bs w-100"><i class="bi bi-search"></i> 查询</button></div>
+      <div class="col-md-3"><label class="form-label" style="font-size:13px;">搜索</label><input type="text" class="form-control" name="q" value="{{ q }}" placeholder="匿名码 / 预约号 / 咨询师"></div>
+      <div class="col-md-2"><label class="form-label" style="font-size:13px;">风险等级</label>
+        <select class="form-select" name="risk">
+          {% set opt = [('all','全部'),('high','高风险'),('medium','中风险'),('low','低风险')] %}
+          {% for v,l in opt %}<option value="{{ v }}" {% if risk_filter==v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1"><button type="submit" class="btn btn-primary-bs w-100"><i class="bi bi-search"></i> 查询</button></div>
     </form>
   </div>
 </div>
@@ -28,18 +34,24 @@
     <div class="table-responsive">
     <table class="table table-hover align-middle mb-0" style="font-size:13px;">
       <thead class="table-light"><tr>
-        <th>预约编号</th><th>日期时段</th><th>咨询师</th><th>房间</th><th>匿名识别码</th><th>签到状态</th><th>干预状态</th><th>操作</th>
+        <th>预约编号</th><th>日期时段</th><th>咨询师/房间</th><th>匿名识别码</th><th>风险等级</th><th>签到状态</th><th>干预状态</th><th>操作</th>
       </tr></thead>
       <tbody>
         {% for a in appointments %}
         <tr id="apt-row-{{ a.id }}">
           <td><code style="font-size:11px;">{{ a.appointment_no }}</code></td>
           <td><div style="font-weight:600;">{{ a.appointment_date }}</div><div style="font-size:12px;color:#7b88a1;">{{ a.start_time }} - {{ a.end_time }}</div></td>
-          <td>{{ a.counselor_name }}</td>
-          <td><span class="badge bg-light text-dark" style="font-size:11px;">{{ a.room_number }}</span> <small>{{ a.room_type }}</small></td>
-          <td><code style="color:#5e81ac;">{{ a.anonymous_code }}</code></td>
+          <td><div>{{ a.counselor_name }}</div><small class="text-secondary">房间 {{ a.room_number }} · {{ a.room_type }}</small></td>
           <td>
-            {% if a.checkin_status=='checked_in' %}<span class="badge badge-checked"><i class="bi bi-check-circle me-1"></i>已签到</span><div style="font-size:11px;color:#7b88a1;">{{ a.checkin_time }}</div>
+            <code style="color:#5e81ac;">{{ a.anonymous_code }}</code>
+            {% if a.is_abnormal %}<div><span class="badge bg-warning text-dark" style="font-size:10px;">异常预约</span></div>{% endif %}
+          </td>
+          <td>{% if a.risk_level %}<span class="badge risk-{{ a.risk_level }}">{{ {'high':'高风险','medium':'中风险','low':'低风险'}[a.risk_level] }}</span>{% else %}<span class="text-secondary">-</span>{% endif %}</td>
+          <td>
+            {% if a.checkin_status=='checked_in' %}
+              {% if a.is_late %}<span class="badge bg-warning text-dark"><i class="bi bi-clock-history me-1"></i>迟到签到</span>
+              {% else %}<span class="badge badge-checked"><i class="bi bi-check-circle me-1"></i>已签到</span>{% endif %}
+              <div style="font-size:11px;color:#7b88a1;">{{ a.checkin_time }}{% if a.is_late %} · 迟到{{ a.late_minutes }}分{% endif %}</div>
             {% elif a.no_show_marked==1 %}<span class="badge badge-noshow"><i class="bi bi-x-circle me-1"></i>失约</span>
             {% elif a.checkin_status=='cancelled' %}<span class="badge badge-cancelled"><i class="bi bi-slash-circle me-1"></i>已取消</span>
             {% else %}<span class="badge badge-pending"><i class="bi bi-clock me-1"></i>待签到</span>{% endif %}

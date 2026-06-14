@@ -14,7 +14,10 @@ from app.handlers_appointments import (AnonymousBookPage, AnonymousBookCheck, An
                                        AppointmentsPage)
 from app.handlers_checkin import (CheckinApi, MarkNoShowApi, CancelAppointmentApi,
                                    InterventionsPage, LiftCooldownApi, InterventionRemarkApi)
-from app.handlers_analytics import AnalyticsPage
+from app.handlers_analytics import AnalyticsPage, ReportExportApi
+from app.handlers_risk import RiskWarningsPage, RiskUsersPage, ResolveWarningApi
+from app.handlers_notifications import (NotificationsPage, NotificationsApi,
+                                          MarkNotificationReadApi, NotificationsBadgePartial)
 
 def create_app():
     init_db()
@@ -64,6 +67,16 @@ def create_app():
     app.add_route('/api/intervention/remark', InterventionRemarkApi())
 
     app.add_route('/analytics', AnalyticsPage())
+    app.add_route('/api/report/export', ReportExportApi())
+
+    app.add_route('/risk-warnings', RiskWarningsPage())
+    app.add_route('/risk-users', RiskUsersPage())
+    app.add_route('/api/risk/resolve', ResolveWarningApi())
+
+    app.add_route('/notifications', NotificationsPage())
+    app.add_route('/api/notifications', NotificationsApi())
+    app.add_route('/api/notifications/read', MarkNotificationReadApi())
+    app.add_route('/api/notifications/badge', NotificationsBadgePartial())
 
     return app
 

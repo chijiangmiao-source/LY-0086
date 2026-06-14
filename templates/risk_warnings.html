@@ -1,0 +1,124 @@
+{% extends "_base_app.html" %}
+{% block title %}风险预警{% endblock %}
+{% block page_title %}<i class="bi bi-exclamation-triangle-fill me-1"></i>风险预警管理{% endblock %}
+{% block content %}
+<div class="row mb-4 g-3">
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#fef2f2;color:#bf616a;"><i class="bi bi-exclamation-triangle-fill"></i></div><div class="stat-value">{{ total_unresolved }}</div><div class="stat-label">未处理预警</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#fee2e2;color:#b91c1c;"><i class="bi bi-x-octagon"></i></div><div class="stat-value">{{ level_counts.get('high', 0) }}</div><div class="stat-label">高风险预警</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:#d97706;"><i class="bi bi-exclamation-circle"></i></div><div class="stat-value">{{ level_counts.get('medium', 0) }}</div><div class="stat-label">中风险预警</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#faf5ff;color:#b48ead;"><i class="bi bi-people"></i></div><div class="stat-value">{{ high_risk_users|length }}</div><div class="stat-label">高风险用户</div></div></div>
+</div>
+
+<ul class="nav nav-tabs mb-3" id="riskTabs">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabWarnings">预警列表</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabUsers">高风险用户</button></li>
+</ul>
+
+<div class="tab-content">
+  <div class="tab-pane fade show active" id="tabWarnings">
+    <div class="card-panel">
+      <div class="card-header">
+        <h6 class="mb-0">风险预警记录</h6>
+        <div class="d-flex gap-2">
+          <select class="form-select form-select-sm" style="width:120px;" onchange="filterByLevel(this.value)">
+            <option value="all" {% if risk_level == 'all' %}selected{% endif %}>全部等级</option>
+            <option value="high" {% if risk_level == 'high' %}selected{% endif %}>高风险</option>
+            <option value="medium" {% if risk_level == 'medium' %}selected{% endif %}>中风险</option>
+            <option value="low" {% if risk_level == 'low' %}selected{% endif %}>低风险</option>
+          </select>
+          <select class="form-select form-select-sm" style="width:120px;" onchange="filterByStatus(this.value)">
+            <option value="unresolved" {% if status_filter == 'unresolved' %}selected{% endif %}>未处理</option>
+            <option value="all" {% if status_filter == 'all' %}selected{% endif %}>全部</option>
+            <option value="resolved" {% if status_filter == 'resolved' %}selected{% endif %}>已处理</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        {% if warnings %}
+        <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+          <thead class="table-light sticky-top"><tr><th>风险等级</th><th>类型</th><th>匿名码</th><th>描述</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for w in warnings %}
+            <tr id="rw-row-{{ w.id }}">
+              <td><span class="badge risk-{{ w.risk_level }}">{{ {'high':'高','medium':'中','low':'低'}[w.risk_level] }}</span></td>
+              <td>{{ w.type_label }}</td>
+              <td><code>{{ w.anonymous_code }}</code></td>
+              <td style="max-width:300px;">{{ w.description }}</td>
+              <td style="font-size:12px;color:#7b88a1;">{{ w.created_at }}</td>
+              <td>{% if w.is_resolved %}<span class="badge bg-secondary">已处理</span>{% else %}<span class="badge bg-warning text-dark">待处理</span>{% endif %}</td>
+              <td>
+                {% if can_manage and not w.is_resolved %}
+                <button class="btn btn-sm btn-outline-primary" onclick="resolveWarning({{ w.id }}, '{{ w.anonymous_code }}')"><i class="bi bi-check2"></i> 处理</button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-5 text-secondary"><i class="bi bi-check2-all" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">暂无风险预警</div></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="tabUsers">
+    <div class="card-panel">
+      <div class="card-header"><h6 class="mb-0">高风险用户列表</h6></div>
+      <div class="card-body p-0">
+        {% if high_risk_users %}
+        <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+          <thead class="table-light sticky-top"><tr><th>匿名码</th><th>累计失约</th><th>总预约</th><th>失约次数</th><th>冷静期至</th><th>风险原因</th></tr></thead>
+          <tbody>
+            {% for u in high_risk_users %}
+            <tr>
+              <td><code style="color:#bf616a;font-weight:600;">{{ u.anonymous_code }}</code></td>
+              <td><span class="badge badge-noshow">{{ u.no_show_count }} 次</span></td>
+              <td>{{ u.total_appts }}</td>
+              <td>{{ u.total_noshow }}</td>
+              <td>{% if u.cooldown_until %}<span style="color:#d08770;font-weight:600;">{{ u.cooldown_until }}</span>{% else %}<span class="text-secondary">-</span>{% endif %}</td>
+              <td style="font-size:12px;color:#7b88a1;">{{ u.risk_reason or '-' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-5 text-secondary"><i class="bi bi-shield-check" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">暂无高风险用户</div></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="resolveModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title"><i class="bi bi-check2-circle text-success me-1"></i>处理风险预警</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="alert alert-warning" style="font-size:13px;"><i class="bi bi-exclamation-triangle me-1"></i>匿名识别码：<code id="rw_code"></code></div>
+    <div class="mb-3"><label class="form-label">处理备注 *</label><textarea class="form-control" id="rw_remark" rows="3" placeholder="请填写处理说明（如：已联系沟通、已解除冷静期、转介上级等）" required></textarea></div>
+    <input type="hidden" id="rw_id">
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+    <button type="button" class="btn btn-success" hx-post="/api/risk/resolve" hx-vals='js:{"warning_id": parseInt(document.getElementById("rw_id").value), "resolution_note": document.getElementById("rw_remark").value}' hx-headers='{"Content-Type":"application/json"}' data-close-modal="1" data-refresh="1" data-toast-success="预警已处理">确认处理</button>
+  </div>
+</div></div></div>
+
+<script>
+function filterByLevel(level) {
+  var url = new URL(window.location);
+  url.searchParams.set('level', level);
+  window.location.href = url.toString();
+}
+function filterByStatus(status) {
+  var url = new URL(window.location);
+  url.searchParams.set('status', status);
+  window.location.href = url.toString();
+}
+function resolveWarning(id, code) {
+  document.getElementById('rw_id').value = id;
+  document.getElementById('rw_code').textContent = code;
+  document.getElementById('rw_remark').value = '';
+  new bootstrap.Modal(document.getElementById('resolveModal')).show();
+}
+</script>
+{% endblock %}

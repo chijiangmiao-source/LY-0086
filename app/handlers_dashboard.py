@@ -37,6 +37,9 @@ class Dashboard:
         c.execute("SELECT COUNT(*) as cnt FROM counselors WHERE is_active = 1")
         active_counselors = c.fetchone()['cnt']
 
+        c.execute("SELECT COUNT(*) as cnt FROM risk_warnings WHERE is_resolved = 0")
+        unresolved_warnings = c.fetchone()['cnt']
+
         conn.close()
 
         resp.content_type = 'text/html; charset=utf-8'
@@ -50,6 +53,7 @@ class Dashboard:
             'total_rooms': total_rooms,
             'active_counselors': active_counselors,
             'today_list': today_list,
+            'unresolved_warnings': unresolved_warnings,
             'nav': 'dashboard',
             'year': datetime.now().year,
         })

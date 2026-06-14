@@ -1,4 +1,20 @@
 <div class="mb-3">
+  {% if is_abnormal or risk_level == 'high' or risk_level == 'medium' %}
+  <div class="alert alert-{% if risk_level == 'high' %}danger{% else %}warning{% endif %} mb-3" style="border-radius:12px;font-size:13px;">
+    <div class="d-flex align-items-center">
+      <i class="bi bi-exclamation-triangle-fill me-2" style="font-size:20px;"></i>
+      <div>
+        <div style="font-weight:700;">
+          {% if risk_level == 'high' %}⚠️ 高风险提醒{% elif risk_level == 'medium' %}⚠️ 中风险提醒{% else %}注意{% endif %}
+        </div>
+        <div style="font-size:12px;opacity:0.9;line-height:1.6;">
+          {% if risk_level == 'high' %}您的预约行为已触发高风险预警，本次预约可能需要工作人员人工审核。如有疑问请联系咨询中心。{% elif risk_level == 'medium' %}您近期失约频率较高，请注意准时赴约，累计失约3次将进入冷静期。{% elif is_abnormal %}您的预约行为存在异常，系统已记录。请合理安排预约，避免频繁预约或取消。{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="alert alert-success mb-0" style="border-radius:12px;">
     <div class="d-flex align-items-center mb-2">
       <div class="me-2" style="width:48px;height:48px;border-radius:14px;background:#dcfce7;display:flex;align-items:center;justify-content:center;font-size:26px;color:#16a34a;"><i class="bi bi-check-lg"></i></div>
