@@ -172,6 +172,36 @@ def init_db():
         FOREIGN KEY (resolved_by) REFERENCES users(id)
     )''')
 
+    c.execute('''CREATE TABLE IF NOT EXISTS followup_questions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        question_text TEXT NOT NULL,
+        question_type TEXT NOT NULL DEFAULT 'text',
+        options TEXT,
+        sort_order INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS followup_surveys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        appointment_id INTEGER NOT NULL,
+        anonymous_code TEXT NOT NULL,
+        anonymous_user_id INTEGER,
+        counselor_id INTEGER,
+        satisfaction_score INTEGER,
+        rebook_willingness TEXT DEFAULT 'undecided',
+        responses TEXT,
+        comment TEXT,
+        is_abnormal INTEGER DEFAULT 0,
+        abnormal_reason TEXT,
+        is_high_risk INTEGER DEFAULT 0,
+        high_risk_reason TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE,
+        FOREIGN KEY (anonymous_user_id) REFERENCES anonymous_users(id),
+        FOREIGN KEY (counselor_id) REFERENCES counselors(id)
+    )''')
+
     c.execute('''CREATE TABLE IF NOT EXISTS notifications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -207,6 +237,13 @@ def init_db():
     c.execute('''CREATE INDEX IF NOT EXISTS idx_risk_level ON anonymous_users(risk_level)''')
     c.execute('''CREATE INDEX IF NOT EXISTS idx_warning_unresolved ON risk_warnings(is_resolved)''')
     c.execute('''CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, is_read)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_followup_appt ON followup_surveys(appointment_id)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_followup_code ON followup_surveys(anonymous_code)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_followup_counselor ON followup_surveys(counselor_id)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_followup_abnormal ON followup_surveys(is_abnormal)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_followup_highrisk ON followup_surveys(is_high_risk)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_followup_score ON followup_surveys(satisfaction_score)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_followup_created ON followup_surveys(created_at)''')
 
     admin_pw = hashlib.sha256('admin123'.encode()).hexdigest()
     staff_pw = hashlib.sha256('staff123'.encode()).hexdigest()
@@ -235,6 +272,7 @@ def init_db():
             'view_risk_warnings', 'manage_risk_warnings',
             'manage_users', 'manage_permissions',
             'view_notifications',
+            'view_followup', 'manage_followup', 'view_followup_analytics',
         ],
         'staff': [
             'view_dashboard',
@@ -245,6 +283,7 @@ def init_db():
             'view_analytics',
             'view_risk_warnings',
             'view_notifications',
+            'view_followup', 'view_followup_analytics',
         ],
         'intervention': [
             'view_dashboard',
@@ -253,12 +292,14 @@ def init_db():
             'view_analytics',
             'view_risk_warnings', 'manage_risk_warnings',
             'view_notifications',
+            'view_followup', 'manage_followup', 'view_followup_analytics',
         ],
         'counselor': [
             'view_dashboard',
             'view_schedules',
             'view_appointments',
             'view_notifications',
+            'view_followup', 'view_followup_analytics',
         ],
     }
 
@@ -286,6 +327,17 @@ def init_db():
             ('陈思雨', '心理咨询师', '焦虑抑郁、自我成长', '13800000004', 'chen@school.edu', None),
         ]
         c.executemany("INSERT INTO counselors (name, title, specialty, phone, email, user_id) VALUES (?,?,?,?,?,?)", counselors_data)
+
+    c.execute("SELECT COUNT(*) FROM followup_questions")
+    if c.fetchone()[0] == 0:
+        questions_data = [
+            ('咨询后您的情绪状态如何？', 'choice', '["明显好转","有所改善","没有变化","感到更差"]', 1),
+            ('您对咨询师的专业能力评价如何？', 'rating', None, 2),
+            ('您对咨询环境（私密性、舒适度）的评价？', 'rating', None, 3),
+            ('您是否感到被充分倾听和理解？', 'choice', '["完全如此","基本如此","部分如此","不太如此"]', 4),
+            ('您对本次咨询还有其他建议或反馈吗？', 'text', None, 5),
+        ]
+        c.executemany("INSERT INTO followup_questions (question_text, question_type, options, sort_order) VALUES (?,?,?,?)", questions_data)
 
     conn.commit()
     conn.close()
@@ -1076,3 +1128,368 @@ def get_monthly_report(month_offset=0):
         'risk_warning_count': risk_count,
         'high_risk_users': high_risk_users,
     }
+
+def get_active_followup_questions():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM followup_questions WHERE is_active = 1 ORDER BY sort_order, id")
+    rows = dict_rows(c.fetchall())
+    conn.close()
+    return rows
+
+def get_all_followup_questions():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM followup_questions ORDER BY sort_order, id")
+    rows = dict_rows(c.fetchall())
+    conn.close()
+    return rows
+
+def add_followup_question(question_text, question_type, options=None, sort_order=0):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("INSERT INTO followup_questions (question_text, question_type, options, sort_order) VALUES (?,?,?,?)",
+              (question_text, question_type, options, sort_order))
+    conn.commit()
+    qid = c.lastrowid
+    conn.close()
+    return qid
+
+def update_followup_question(question_id, question_text=None, question_type=None, options=None, sort_order=None, is_active=None):
+    conn = get_conn()
+    c = conn.cursor()
+    updates = []
+    params = []
+    if question_text is not None:
+        updates.append("question_text = ?")
+        params.append(question_text)
+    if question_type is not None:
+        updates.append("question_type = ?")
+        params.append(question_type)
+    if options is not None:
+        updates.append("options = ?")
+        params.append(options)
+    if sort_order is not None:
+        updates.append("sort_order = ?")
+        params.append(sort_order)
+    if is_active is not None:
+        updates.append("is_active = ?")
+        params.append(is_active)
+    if not updates:
+        conn.close()
+        return
+    params.append(question_id)
+    c.execute(f"UPDATE followup_questions SET {', '.join(updates)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+def get_eligible_appointments_for_followup(anonymous_code):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""SELECT a.*, cou.name as counselor_name, r.room_number
+                 FROM appointments a
+                 JOIN counselors cou ON a.counselor_id = cou.id
+                 JOIN rooms r ON a.room_id = r.id
+                 WHERE a.anonymous_code = ?
+                 AND a.checkin_status = 'checked_in'
+                 AND a.id NOT IN (SELECT appointment_id FROM followup_surveys)
+                 ORDER BY a.appointment_date DESC, a.start_time DESC""",
+              (anonymous_code,))
+    rows = dict_rows(c.fetchall())
+    conn.close()
+    return rows
+
+def submit_followup_survey(appointment_id, anonymous_code, anonymous_user_id, counselor_id,
+                           satisfaction_score, rebook_willingness, responses, comment=''):
+    import json
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("SELECT id FROM followup_surveys WHERE appointment_id = ?", (appointment_id,))
+    if c.fetchone():
+        conn.close()
+        return None
+
+    is_abnormal = 0
+    abnormal_reason = None
+    is_high_risk = 0
+    high_risk_reason = None
+
+    if satisfaction_score is not None and satisfaction_score <= 2:
+        is_abnormal = 1
+        abnormal_reason = f'满意度评分偏低({satisfaction_score}分)'
+        is_high_risk = 1
+        high_risk_reason = f'低满意度({satisfaction_score}分)'
+
+    responses_json = json.dumps(responses, ensure_ascii=False) if isinstance(responses, (dict, list)) else responses
+
+    if isinstance(responses, dict):
+        for key, val in responses.items():
+            val_str = str(val)
+            if '感到更差' in val_str or '不太如此' in val_str:
+                is_abnormal = 1
+                if not abnormal_reason:
+                    abnormal_reason = f'回访异常反馈：{val_str}'
+                if not is_high_risk:
+                    is_high_risk = 1
+                    high_risk_reason = f'异常反馈：{val_str}'
+
+    if comment and len(comment) > 0:
+        risk_keywords = ['自杀', '自残', '伤害', '不想活', '绝望', '崩溃', '无望']
+        for kw in risk_keywords:
+            if kw in comment:
+                is_abnormal = 1
+                is_high_risk = 1
+                abnormal_reason = (abnormal_reason + '；' if abnormal_reason else '') + f'留言含高风险关键词'
+                high_risk_reason = (high_risk_reason + '；' if high_risk_reason else '') + f'留言含高风险关键词：{kw}'
+                break
+
+    c.execute("""INSERT INTO followup_surveys
+                 (appointment_id, anonymous_code, anonymous_user_id, counselor_id,
+                  satisfaction_score, rebook_willingness, responses, comment,
+                  is_abnormal, abnormal_reason, is_high_risk, high_risk_reason)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+              (appointment_id, anonymous_code, anonymous_user_id, counselor_id,
+               satisfaction_score, rebook_willingness, responses_json, comment,
+               is_abnormal, abnormal_reason, is_high_risk, high_risk_reason))
+    survey_id = c.lastrowid
+
+    if is_high_risk:
+        c.execute("""INSERT INTO risk_warnings
+                     (anonymous_user_id, anonymous_code, warning_type, risk_level, description, appointment_id)
+                     VALUES (?, ?, ?, ?, ?, ?)""",
+                  (anonymous_user_id, anonymous_code, 'followup_high_risk', 'high',
+                   f'回访高风险预警：{high_risk_reason}', appointment_id))
+        c.execute("""INSERT INTO notifications (user_id, notification_type, title, content, related_appointment_id)
+                     SELECT u.id, 'followup_alert', ?, ?, ?
+                     FROM users u WHERE u.role IN ('admin', 'intervention')""",
+                  (f'回访高风险预警：匿名用户{anonymous_code[:4]}***',
+                   f'回访发现异常反馈，需关注。原因：{high_risk_reason}', appointment_id))
+
+    if is_abnormal and not is_high_risk:
+        c.execute("""INSERT INTO notifications (user_id, notification_type, title, content, related_appointment_id)
+                     SELECT u.id, 'followup_alert', ?, ?, ?
+                     FROM users u WHERE u.role IN ('admin', 'intervention')""",
+                  (f'回访异常反馈：匿名用户{anonymous_code[:4]}***',
+                   f'回访发现异常反馈。原因：{abnormal_reason}', appointment_id))
+
+    conn.commit()
+    conn.close()
+    return survey_id
+
+def get_followup_surveys(filters=None, limit=100):
+    conn = get_conn()
+    c = conn.cursor()
+    query = """SELECT fs.*, cou.name as counselor_name,
+                      a.appointment_no, a.appointment_date, a.start_time, a.end_time
+               FROM followup_surveys fs
+               LEFT JOIN counselors cou ON fs.counselor_id = cou.id
+               LEFT JOIN appointments a ON fs.appointment_id = a.id
+               WHERE 1=1"""
+    params = []
+    if filters:
+        if filters.get('anonymous_code'):
+            query += " AND fs.anonymous_code LIKE ?"
+            params.append(f"%{filters['anonymous_code']}%")
+        if filters.get('counselor_id'):
+            query += " AND fs.counselor_id = ?"
+            params.append(filters['counselor_id'])
+        if filters.get('satisfaction_min'):
+            query += " AND fs.satisfaction_score >= ?"
+            params.append(filters['satisfaction_min'])
+        if filters.get('satisfaction_max'):
+            query += " AND fs.satisfaction_score <= ?"
+            params.append(filters['satisfaction_max'])
+        if filters.get('rebook_willingness'):
+            query += " AND fs.rebook_willingness = ?"
+            params.append(filters['rebook_willingness'])
+        if filters.get('is_abnormal') is not None:
+            query += " AND fs.is_abnormal = ?"
+            params.append(filters['is_abnormal'])
+        if filters.get('is_high_risk') is not None:
+            query += " AND fs.is_high_risk = ?"
+            params.append(filters['is_high_risk'])
+        if filters.get('date_from'):
+            query += " AND fs.created_at >= ?"
+            params.append(filters['date_from'])
+        if filters.get('date_to'):
+            query += " AND fs.created_at <= ?"
+            params.append(filters['date_to'] + ' 23:59:59')
+    query += " ORDER BY fs.created_at DESC LIMIT ?"
+    params.append(limit)
+    c.execute(query, params)
+    rows = dict_rows(c.fetchall())
+    conn.close()
+    return rows
+
+def get_followup_survey_by_appointment(appointment_id):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM followup_surveys WHERE appointment_id = ?", (appointment_id,))
+    row = dict_row(c.fetchone())
+    conn.close()
+    return row
+
+def mark_followup_abnormal(survey_id, is_abnormal, abnormal_reason=''):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE followup_surveys SET is_abnormal = ?, abnormal_reason = ? WHERE id = ?",
+              (is_abnormal, abnormal_reason, survey_id))
+    conn.commit()
+    conn.close()
+
+def get_satisfaction_trend(start_date, end_date, period='week'):
+    conn = get_conn()
+    c = conn.cursor()
+    if period == 'week':
+        group_expr = "strftime('%Y-W%W', fs.created_at)"
+    elif period == 'month':
+        group_expr = "strftime('%Y-%m', fs.created_at)"
+    else:
+        group_expr = "date(fs.created_at)"
+
+    c.execute(f"""SELECT {group_expr} as period_label,
+                         COUNT(*) as total,
+                         AVG(fs.satisfaction_score) as avg_score,
+                         SUM(CASE WHEN fs.satisfaction_score >= 4 THEN 1 ELSE 0 END) as high_count,
+                         SUM(CASE WHEN fs.satisfaction_score <= 2 THEN 1 ELSE 0 END) as low_count
+                  FROM followup_surveys fs
+                  WHERE fs.satisfaction_score IS NOT NULL
+                  AND date(fs.created_at) BETWEEN ? AND ?
+                  GROUP BY period_label
+                  ORDER BY period_label""",
+              (start_date, end_date))
+    rows = dict_rows(c.fetchall())
+    for r in rows:
+        r['avg_score'] = round(r['avg_score'], 2) if r['avg_score'] else 0
+        r['high_ratio'] = round(r['high_count'] / r['total'] * 100, 1) if r['total'] > 0 else 0
+        r['low_ratio'] = round(r['low_count'] / r['total'] * 100, 1) if r['total'] > 0 else 0
+    conn.close()
+    return rows
+
+def get_counselor_satisfaction_distribution(start_date, end_date):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""SELECT cou.id, cou.name, cou.title,
+                        COUNT(fs.id) as total_surveys,
+                        AVG(fs.satisfaction_score) as avg_score,
+                        SUM(CASE WHEN fs.satisfaction_score = 5 THEN 1 ELSE 0 END) as score_5,
+                        SUM(CASE WHEN fs.satisfaction_score = 4 THEN 1 ELSE 0 END) as score_4,
+                        SUM(CASE WHEN fs.satisfaction_score = 3 THEN 1 ELSE 0 END) as score_3,
+                        SUM(CASE WHEN fs.satisfaction_score = 2 THEN 1 ELSE 0 END) as score_2,
+                        SUM(CASE WHEN fs.satisfaction_score = 1 THEN 1 ELSE 0 END) as score_1,
+                        SUM(CASE WHEN fs.rebook_willingness = 'yes' THEN 1 ELSE 0 END) as rebook_yes,
+                        SUM(CASE WHEN fs.rebook_willingness = 'no' THEN 1 ELSE 0 END) as rebook_no,
+                        SUM(CASE WHEN fs.rebook_willingness = 'undecided' THEN 1 ELSE 0 END) as rebook_undecided
+                 FROM counselors cou
+                 LEFT JOIN followup_surveys fs ON cou.id = fs.counselor_id
+                    AND date(fs.created_at) BETWEEN ? AND ?
+                 WHERE cou.is_active = 1
+                 GROUP BY cou.id
+                 ORDER BY avg_score DESC NULLS LAST""",
+              (start_date, end_date))
+    rows = dict_rows(c.fetchall())
+    for r in rows:
+        r['avg_score'] = round(r['avg_score'], 2) if r['avg_score'] else 0
+        r['rebook_rate'] = round(r['rebook_yes'] / r['total_surveys'] * 100, 1) if r['total_surveys'] > 0 else 0
+    conn.close()
+    return rows
+
+def get_abnormal_feedback_stats(start_date, end_date, period='week'):
+    conn = get_conn()
+    c = conn.cursor()
+    if period == 'week':
+        group_expr = "strftime('%Y-W%W', fs.created_at)"
+    elif period == 'month':
+        group_expr = "strftime('%Y-%m', fs.created_at)"
+    else:
+        group_expr = "date(fs.created_at)"
+
+    c.execute(f"""SELECT {group_expr} as period_label,
+                         COUNT(*) as total,
+                         SUM(CASE WHEN fs.is_abnormal = 1 THEN 1 ELSE 0 END) as abnormal_count,
+                         SUM(CASE WHEN fs.is_high_risk = 1 THEN 1 ELSE 0 END) as high_risk_count,
+                         SUM(CASE WHEN fs.rebook_willingness = 'no' THEN 1 ELSE 0 END) as no_rebook_count
+                  FROM followup_surveys fs
+                  WHERE date(fs.created_at) BETWEEN ? AND ?
+                  GROUP BY period_label
+                  ORDER BY period_label""",
+              (start_date, end_date))
+    rows = dict_rows(c.fetchall())
+    for r in rows:
+        r['abnormal_ratio'] = round(r['abnormal_count'] / r['total'] * 100, 1) if r['total'] > 0 else 0
+        r['high_risk_ratio'] = round(r['high_risk_count'] / r['total'] * 100, 1) if r['total'] > 0 else 0
+        r['no_rebook_ratio'] = round(r['no_rebook_count'] / r['total'] * 100, 1) if r['total'] > 0 else 0
+    conn.close()
+    return rows
+
+def get_high_risk_followup_warnings(limit=50):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""SELECT fs.*, cou.name as counselor_name,
+                        a.appointment_no, a.appointment_date
+                 FROM followup_surveys fs
+                 LEFT JOIN counselors cou ON fs.counselor_id = cou.id
+                 LEFT JOIN appointments a ON fs.appointment_id = a.id
+                 WHERE fs.is_high_risk = 1
+                 ORDER BY fs.created_at DESC
+                 LIMIT ?""", (limit,))
+    rows = dict_rows(c.fetchall())
+    conn.close()
+    return rows
+
+def get_followup_summary_stats(start_date=None, end_date=None):
+    conn = get_conn()
+    c = conn.cursor()
+    where = ""
+    params = []
+    if start_date and end_date:
+        where = "WHERE date(created_at) BETWEEN ? AND ?"
+        params = [start_date, end_date]
+
+    c.execute(f"SELECT COUNT(*) as cnt FROM followup_surveys {where}", params)
+    total = c.fetchone()['cnt']
+
+    c.execute(f"""SELECT AVG(satisfaction_score) as avg_score,
+                         SUM(CASE WHEN satisfaction_score >= 4 THEN 1 ELSE 0 END) as satisfied,
+                         SUM(CASE WHEN satisfaction_score <= 2 THEN 1 ELSE 0 END) as unsatisfied,
+                         SUM(CASE WHEN is_abnormal = 1 THEN 1 ELSE 0 END) as abnormal,
+                         SUM(CASE WHEN is_high_risk = 1 THEN 1 ELSE 0 END) as high_risk,
+                         SUM(CASE WHEN rebook_willingness = 'yes' THEN 1 ELSE 0 END) as rebook_yes,
+                         SUM(CASE WHEN rebook_willingness = 'no' THEN 1 ELSE 0 END) as rebook_no,
+                         SUM(CASE WHEN rebook_willingness = 'undecided' THEN 1 ELSE 0 END) as rebook_undecided
+                  FROM followup_surveys {where}""", params)
+    stats = dict_row(c.fetchone())
+
+    c.execute(f"""SELECT satisfaction_score, COUNT(*) as cnt
+                  FROM followup_surveys
+                  WHERE satisfaction_score IS NOT NULL
+                  {"AND date(created_at) BETWEEN ? AND ?" if start_date and end_date else ""}
+                  GROUP BY satisfaction_score
+                  ORDER BY satisfaction_score""",
+              params if start_date and end_date else [])
+    score_dist = dict_rows(c.fetchall())
+
+    conn.close()
+
+    if stats:
+        stats['total'] = total
+        stats['avg_score'] = round(stats['avg_score'], 2) if stats.get('avg_score') else 0
+        stats['satisfied'] = stats.get('satisfied') or 0
+        stats['unsatisfied'] = stats.get('unsatisfied') or 0
+        stats['abnormal'] = stats.get('abnormal') or 0
+        stats['high_risk'] = stats.get('high_risk') or 0
+        stats['rebook_yes'] = stats.get('rebook_yes') or 0
+        stats['rebook_no'] = stats.get('rebook_no') or 0
+        stats['rebook_undecided'] = stats.get('rebook_undecided') or 0
+        stats['satisfaction_rate'] = round(stats['satisfied'] / total * 100, 1) if total > 0 else 0
+        stats['abnormal_rate'] = round(stats['abnormal'] / total * 100, 1) if total > 0 else 0
+        stats['high_risk_rate'] = round(stats['high_risk'] / total * 100, 1) if total > 0 else 0
+        stats['rebook_rate'] = round(stats['rebook_yes'] / total * 100, 1) if total > 0 else 0
+    else:
+        stats = {'total': 0, 'avg_score': 0, 'satisfied': 0, 'unsatisfied': 0,
+                 'abnormal': 0, 'high_risk': 0, 'rebook_yes': 0, 'rebook_no': 0,
+                 'rebook_undecided': 0, 'satisfaction_rate': 0, 'abnormal_rate': 0,
+                 'high_risk_rate': 0, 'rebook_rate': 0}
+
+    return stats, score_dist

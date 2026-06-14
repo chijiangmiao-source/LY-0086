@@ -88,6 +88,7 @@ class RiskWarningsPage:
             'abnormal_booking': '异常预约',
             'checkin_anomaly': '签到异常',
             'high_cancel_rate': '高取消率',
+            'followup_high_risk': '回访高风险',
             'other': '其他',
         }
 

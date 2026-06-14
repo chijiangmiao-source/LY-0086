@@ -18,6 +18,10 @@ from app.handlers_analytics import AnalyticsPage, ReportExportApi
 from app.handlers_risk import RiskWarningsPage, RiskUsersPage, ResolveWarningApi
 from app.handlers_notifications import (NotificationsPage, NotificationsApi,
                                           MarkNotificationReadApi, NotificationsBadgePartial)
+from app.handlers_followup import (FollowupPage, FollowupSurveyPage, FollowupSurveySubmitApi,
+                                    FollowupDetailApi, FollowupMarkAbnormalApi,
+                                    FollowupQuestionsApi, FollowupQuestionUpdateApi,
+                                    FollowupAnalyticsPage, FollowupAnalyticsExportApi)
 
 def create_app():
     init_db()
@@ -77,6 +81,16 @@ def create_app():
     app.add_route('/api/notifications', NotificationsApi())
     app.add_route('/api/notifications/read', MarkNotificationReadApi())
     app.add_route('/api/notifications/badge', NotificationsBadgePartial())
+
+    app.add_route('/followup', FollowupPage())
+    app.add_route('/anonymous/followup', FollowupSurveyPage())
+    app.add_route('/api/followup/submit', FollowupSurveySubmitApi())
+    app.add_route('/api/followup/{survey_id:int}', FollowupDetailApi())
+    app.add_route('/api/followup/abnormal', FollowupMarkAbnormalApi())
+    app.add_route('/api/followup/questions', FollowupQuestionsApi())
+    app.add_route('/api/followup/questions/{question_id:int}', FollowupQuestionUpdateApi())
+    app.add_route('/followup/analytics', FollowupAnalyticsPage())
+    app.add_route('/api/followup/analytics/export', FollowupAnalyticsExportApi())
 
     return app
 

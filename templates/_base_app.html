@@ -150,7 +150,9 @@ function loadNotifications() {
           var html = '';
           notifs.forEach(function(n){
             var iconClass = n.notification_type === 'risk_warning' ? 'bi-exclamation-triangle text-warning' :
-                            n.notification_type === 'checkin_anomaly' ? 'bi-clock text-danger' : 'bi-info-circle text-info';
+                            n.notification_type === 'checkin_anomaly' ? 'bi-clock text-danger' :
+                            n.notification_type === 'followup_alert' ? 'bi-chat-left-heart text-danger' :
+                            'bi-info-circle text-info';
             html += '<div class="notif-item '+(n.is_read?'':'unread')+'" onclick="markNotifRead('+n.id+')">' +
                      '<div class="d-flex gap-2"><i class="bi '+iconClass+'" style="font-size:18px;margin-top:2px;"></i>' +
                      '<div class="flex-grow-1"><div style="font-weight:600;font-size:13px;">'+n.title+'</div>' +
@@ -193,11 +195,13 @@ document.addEventListener('DOMContentLoaded', function(){
     <li class="nav-item"><a href="/schedules" class="nav-link {% if nav == 'schedules' %}active{% endif %}"><i class="bi bi-calendar-week"></i> 排班管理</a></li>
     <li class="nav-item"><a href="/interventions" class="nav-link {% if nav == 'interventions' %}active{% endif %}"><i class="bi bi-exclamation-triangle"></i> 失约与干预</a></li>
     <li class="nav-item"><a href="/analytics" class="nav-link {% if nav == 'analytics' %}active{% endif %}"><i class="bi bi-bar-chart-line"></i> 分析报表</a></li>
+    <li class="nav-item"><a href="/followup" class="nav-link {% if nav == 'followup' or nav == 'followup_analytics' %}active{% endif %}"><i class="bi bi-chat-left-heart"></i> 回访与满意度</a></li>
     <li class="nav-item"><a href="/risk-warnings" class="nav-link {% if nav == 'risk' %}active{% endif %}"><i class="bi bi-exclamation-triangle-fill"></i> 风险预警</a></li>
     <li class="nav-item"><a href="/notifications" class="nav-link {% if nav == 'notifications' %}active{% endif %}" style="position:relative;"><i class="bi bi-bell"></i> 消息通知 <span id="nav-notif-badge"></span></a></li>
   </ul>
   <div class="px-3 py-3 mt-3 border-top border-white border-opacity-10">
     <a href="/anonymous/book" target="_blank" class="nav-link text-light" style="opacity:0.85;font-size:13px;"><i class="bi bi-box-arrow-up-right"></i> 匿名预约入口</a>
+    <a href="/anonymous/followup" target="_blank" class="nav-link text-light" style="opacity:0.85;font-size:13px;"><i class="bi bi-box-arrow-up-right"></i> 匿名回访入口</a>
   </div>
 </div>
 <div class="col py-0 px-0">

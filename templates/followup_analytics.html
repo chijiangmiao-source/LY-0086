@@ -1,0 +1,331 @@
+{% extends "_base_app.html" %}
+{% block title %}回访满意度分析{% endblock %}
+{% block page_title %}<i class="bi bi-graph-up-arrow me-1"></i>回访满意度分析 · {{ start_date }} ~ {{ end_date }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="d-flex gap-2">
+    <div class="btn-group">
+      <a href="/followup/analytics?days=7&period={{ period }}" class="btn btn-sm btn-outline-secondary {% if days_range == 7 %}active{% endif %}">近7天</a>
+      <a href="/followup/analytics?days=30&period={{ period }}" class="btn btn-sm btn-outline-secondary {% if days_range == 30 %}active{% endif %}">近30天</a>
+      <a href="/followup/analytics?days=90&period={{ period }}" class="btn btn-sm btn-outline-secondary {% if days_range == 90 %}active{% endif %}">近90天</a>
+    </div>
+    <div class="btn-group">
+      <a href="/followup/analytics?days={{ days_range }}&period=day" class="btn btn-sm btn-primary-bs {% if period == 'day' %}active{% endif %}">按日</a>
+      <a href="/followup/analytics?days={{ days_range }}&period=week" class="btn btn-sm btn-primary-bs {% if period == 'week' %}active{% endif %}">按周</a>
+      <a href="/followup/analytics?days={{ days_range }}&period=month" class="btn btn-sm btn-primary-bs {% if period == 'month' %}active{% endif %}">按月</a>
+    </div>
+  </div>
+  <div>
+    <a href="/api/followup/analytics/export?days={{ days_range }}&period={{ period }}" class="btn btn-sm btn-success"><i class="bi bi-download"></i> 导出CSV</a>
+    <a href="/followup" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>回访记录</a>
+  </div>
+</div>
+
+<div class="row mb-4 g-3">
+  <div class="col-md-2">
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#eef2ff;color:#5e81ac;"><i class="bi bi-chat-left-heart"></i></div>
+      <div class="stat-value">{{ summary_stats.total }}</div>
+      <div class="stat-label">回访总量</div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#ecfdf5;color:#059669;"><i class="bi bi-star"></i></div>
+      <div class="stat-value">{{ summary_stats.avg_score }}<small style="font-size:14px;">/5</small></div>
+      <div class="stat-label">平均满意度</div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#ecfdf5;color:#a3be8c;"><i class="bi bi-emoji-smile"></i></div>
+      <div class="stat-value">{{ summary_stats.satisfaction_rate }}<small style="font-size:14px;">%</small></div>
+      <div class="stat-label">满意率（4-5分）</div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#fef2f2;color:#bf616a;"><i class="bi bi-exclamation-triangle"></i></div>
+      <div class="stat-value">{{ summary_stats.abnormal_rate }}<small style="font-size:14px;">%</small></div>
+      <div class="stat-label">异常反馈率（{{ summary_stats.abnormal }}条）</div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#faf5ff;color:#b48ead;"><i class="bi bi-arrow-repeat"></i></div>
+      <div class="stat-value">{{ summary_stats.rebook_rate }}<small style="font-size:14px;">%</small></div>
+      <div class="stat-label">复约意愿率</div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#fef2f2;color:#dc2626;"><i class="bi bi-exclamation-octagon"></i></div>
+      <div class="stat-value">{{ summary_stats.high_risk }}</div>
+      <div class="stat-label">高风险回访</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-8">
+    <div class="card-panel h-100">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-graph-up me-1"></i>满意度趋势</h6></div>
+      <div class="card-body">
+        {% if satisfaction_trend %}
+        <div class="chart-container">
+          <div class="chart-bar-group">
+            {% for t in satisfaction_trend %}
+            <div class="d-flex flex-column align-items-center" style="flex:1;position:relative;height:200px;">
+              <div style="position:absolute;top:-20px;font-size:11px;font-weight:600;color:#4c566a;">{{ t.avg_score }}</div>
+              <div class="d-flex align-items-end gap-1" style="height:100%;width:100%;justify-content:center;">
+                <div style="width:20px;position:relative;">
+                  <div class="chart-bar" style="width:100%;height:{{ t.bar_pct if t.total>0 else 2 }}%;background:linear-gradient(180deg,#88c0d0,#5e81ac);" title="回访{{ t.total }}条">
+                    {% if t.total>0 %}<span class="bar-value">{{ t.total }}</span>{% endif %}
+                  </div>
+                </div>
+              </div>
+              <span class="bar-label" style="font-size:10px;max-width:60px;text-align:center;">{{ t.period_label[5:] if t.period_label|length > 5 else t.period_label }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="table-responsive mt-4">
+        <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+          <thead class="table-light"><tr><th>时段</th><th>回访数</th><th>平均满意度</th><th>高满意度占比</th><th>低满意度占比</th></tr></thead>
+          <tbody>
+            {% for t in satisfaction_trend %}
+            <tr>
+              <td style="font-weight:600;">{{ t.period_label }}</td>
+              <td><b>{{ t.total }}</b></td>
+              <td><span class="badge {% if t.avg_score >= 4 %}badge-checked{% elif t.avg_score >= 3 %}bg-warning text-dark{% else %}badge-noshow{% endif %}">{{ t.avg_score }}</span></td>
+              <td class="load-low">{{ t.high_ratio }}%</td>
+              <td class="load-high">{{ t.low_ratio }}%</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-secondary">暂无数据</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-panel h-100">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-pie-chart me-1"></i>满意度评分分布</h6></div>
+      <div class="card-body">
+        {% if score_dist %}
+        {% set total_scores = score_dist|sum(attribute='cnt') %}
+        {% for sd in score_dist %}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <div style="font-weight:600;font-size:14px;">
+              {% if sd.satisfaction_score == 5 %}<i class="bi bi-emoji-laughing me-1" style="color:#059669;"></i>非常满意
+              {% elif sd.satisfaction_score == 4 %}<i class="bi bi-emoji-smile me-1" style="color:#a3be8c;"></i>满意
+              {% elif sd.satisfaction_score == 3 %}<i class="bi bi-emoji-neutral me-1" style="color:#d97706;"></i>一般
+              {% elif sd.satisfaction_score == 2 %}<i class="bi bi-emoji-frown me-1" style="color:#ea580c;"></i>不满意
+              {% else %}<i class="bi bi-emoji-angry me-1" style="color:#bf616a;"></i>非常不满意
+              {% endif %}
+            </div>
+            <div><b>{{ sd.cnt }}</b> <small class="text-secondary">({{ (sd.cnt / total_scores * 100)|round(1) if total_scores > 0 else 0 }}%)</small></div>
+          </div>
+          <div class="cooldown-bar">
+            <div style="width:{{ (sd.cnt / total_scores * 100)|round(1) if total_scores > 0 else 0 }}%;background:{% if sd.satisfaction_score >= 4 %}#a3be8c{% elif sd.satisfaction_score == 3 %}#ebcb8b{% else %}#bf616a{% endif %};"></div>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center py-4 text-secondary">暂无数据</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card-panel mb-4">
+  <div class="card-header"><h6 class="mb-0"><i class="bi bi-people me-1"></i>咨询师服务评分分布</h6></div>
+  <div class="card-body">
+    {% if counselor_stats and counselor_stats|selectattr('total_surveys')|list %}
+    <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+      <thead class="table-light">
+        <tr>
+          <th>咨询师</th>
+          <th>职称</th>
+          <th>回访数</th>
+          <th>平均满意度</th>
+          <th>5分</th>
+          <th>4分</th>
+          <th>3分</th>
+          <th>2分</th>
+          <th>1分</th>
+          <th>复约率</th>
+          <th>评分分布</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cs in counselor_stats %}
+        {% if cs.total_surveys > 0 %}
+        <tr>
+          <td style="font-weight:600;">{{ cs.name }}</td>
+          <td class="text-secondary">{{ cs.title or '-' }}</td>
+          <td><b>{{ cs.total_surveys }}</b></td>
+          <td>
+            <span class="badge {% if cs.avg_score >= 4 %}badge-checked{% elif cs.avg_score >= 3 %}bg-warning text-dark{% else %}badge-noshow{% endif %}">
+              {{ cs.avg_score }}
+            </span>
+          </td>
+          <td class="load-low">{{ cs.score_5 }}</td>
+          <td class="load-low">{{ cs.score_4 }}</td>
+          <td>{{ cs.score_3 }}</td>
+          <td class="load-high">{{ cs.score_2 }}</td>
+          <td class="load-high">{{ cs.score_1 }}</td>
+          <td>
+            <span class="badge {% if cs.rebook_rate >= 70 %}badge-checked{% elif cs.rebook_rate >= 40 %}bg-warning text-dark{% else %}badge-noshow{% endif %}">
+              {{ cs.rebook_rate }}%
+            </span>
+          </td>
+          <td style="min-width:200px;">
+            {% set total_c = cs.score_5 + cs.score_4 + cs.score_3 + cs.score_2 + cs.score_1 %}
+            {% if total_c > 0 %}
+            <div class="d-flex gap-0" style="height:16px;border-radius:4px;overflow:hidden;">
+              {% if cs.score_5 > 0 %}<div style="width:{{ (cs.score_5/total_c*100)|round(1) }}%;background:#059669;" title="5分 {{ cs.score_5 }}"></div>{% endif %}
+              {% if cs.score_4 > 0 %}<div style="width:{{ (cs.score_4/total_c*100)|round(1) }}%;background:#a3be8c;" title="4分 {{ cs.score_4 }}"></div>{% endif %}
+              {% if cs.score_3 > 0 %}<div style="width:{{ (cs.score_3/total_c*100)|round(1) }}%;background:#ebcb8b;" title="3分 {{ cs.score_3 }}"></div>{% endif %}
+              {% if cs.score_2 > 0 %}<div style="width:{{ (cs.score_2/total_c*100)|round(1) }}%;background:#d08770;" title="2分 {{ cs.score_2 }}"></div>{% endif %}
+              {% if cs.score_1 > 0 %}<div style="width:{{ (cs.score_1/total_c*100)|round(1) }}%;background:#bf616a;" title="1分 {{ cs.score_1 }}"></div>{% endif %}
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <div class="d-flex gap-3 mt-3" style="font-size:12px;">
+      <div><span class="legend-dot" style="background:#059669;"></span>5分</div>
+      <div><span class="legend-dot" style="background:#a3be8c;"></span>4分</div>
+      <div><span class="legend-dot" style="background:#ebcb8b;"></span>3分</div>
+      <div><span class="legend-dot" style="background:#d08770;"></span>2分</div>
+      <div><span class="legend-dot" style="background:#bf616a;"></span>1分</div>
+    </div>
+    {% else %}
+    <div class="text-center py-4 text-secondary">暂无数据</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card-panel h-100">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-exclamation-triangle me-1"></i>异常反馈占比趋势</h6></div>
+      <div class="card-body">
+        {% if abnormal_stats %}
+        <div class="chart-container">
+          <div class="chart-bar-group" style="height:180px;">
+            {% for a in abnormal_stats %}
+            <div class="d-flex flex-column align-items-center" style="flex:1;position:relative;height:100%;">
+              <div class="d-flex align-items-end gap-1" style="height:100%;width:100%;justify-content:center;">
+                <div style="width:14px;position:relative;">
+                  <div class="chart-bar" style="width:100%;height:{{ a.bar_pct if a.total>0 else 2 }}%;background:linear-gradient(180deg,#88c0d0,#5e81ac);opacity:0.4;" title="回访{{ a.total }}"></div>
+                </div>
+                <div style="width:14px;position:relative;">
+                  <div class="chart-bar" style="width:100%;height:{{ (a.abnormal_count / (abnormal_stats|max(attribute='total')).total * 100)|round(1) if a.abnormal_count>0 else 2 }}%;background:linear-gradient(180deg,#ebcb8b,#d97706);" title="异常{{ a.abnormal_count }}"></div>
+                </div>
+                <div style="width:14px;position:relative;">
+                  <div class="chart-bar" style="width:100%;height:{{ (a.high_risk_count / (abnormal_stats|max(attribute='total')).total * 100)|round(1) if a.high_risk_count>0 else 2 }}%;background:linear-gradient(180deg,#e8a0a0,#bf616a);" title="高风险{{ a.high_risk_count }}"></div>
+                </div>
+              </div>
+              <span class="bar-label" style="font-size:10px;">{{ a.period_label[5:] if a.period_label|length > 5 else a.period_label }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="table-responsive mt-3">
+        <table class="table table-hover align-middle mb-0" style="font-size:12px;">
+          <thead class="table-light"><tr><th>时段</th><th>回访</th><th>异常</th><th>异常率</th><th>高风险</th><th>高风险率</th><th>不复约</th><th>不复约率</th></tr></thead>
+          <tbody>
+            {% for a in abnormal_stats %}
+            <tr>
+              <td style="font-weight:600;">{{ a.period_label }}</td>
+              <td>{{ a.total }}</td>
+              <td class="load-high">{{ a.abnormal_count }}</td>
+              <td><span class="badge {% if a.abnormal_ratio >= 20 %}badge-noshow{% elif a.abnormal_ratio >= 10 %}bg-warning text-dark{% else %}badge-checked{% endif %}">{{ a.abnormal_ratio }}%</span></td>
+              <td class="load-high">{{ a.high_risk_count }}</td>
+              <td><span class="badge {% if a.high_risk_ratio >= 10 %}badge-noshow{% else %}bg-secondary{% endif %}">{{ a.high_risk_ratio }}%</span></td>
+              <td>{{ a.no_rebook_count }}</td>
+              <td>{{ a.no_rebook_ratio }}%</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-secondary">暂无数据</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card-panel h-100">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-exclamation-octagon me-1"></i>高风险回访预警</h6></div>
+      <div class="card-body">
+        {% if high_risk_warnings %}
+        {% for w in high_risk_warnings %}
+        <div class="mb-3 p-3 rounded" style="background:#fef2f2;border:1px solid #fecaca;">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+              <span class="badge bg-danger"><i class="bi bi-exclamation-octagon-fill me-1"></i>高风险</span>
+              <code style="font-size:12px;margin-left:8px;">{{ w.masked_code }}</code>
+            </div>
+            <div style="font-size:12px;color:#7b88a1;">{{ w.created_at[:16] if w.created_at else '' }}</div>
+          </div>
+          <div style="font-size:13px;color:#4c566a;">
+            {% if w.counselor_name %}<span class="me-2"><i class="bi bi-person me-1"></i>{{ w.counselor_name }}</span>{% endif %}
+            {% if w.appointment_date %}<span class="me-2"><i class="bi bi-calendar me-1"></i>{{ w.appointment_date }}</span>{% endif %}
+            {% if w.satisfaction_score %}<span class="me-2"><i class="bi bi-star me-1"></i>{{ w.satisfaction_score }}分</span>{% endif %}
+          </div>
+          {% if w.high_risk_reason %}
+          <div class="mt-2" style="font-size:12px;color:#bf616a;"><i class="bi bi-info-circle me-1"></i>{{ w.high_risk_reason }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center py-4 text-secondary">
+          <i class="bi bi-shield-check" style="font-size:40px;color:#a3be8c;"></i>
+          <div class="mt-2">暂无高风险回访预警</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card-panel">
+  <div class="card-header"><h6 class="mb-0"><i class="bi bi-arrow-repeat me-1"></i>复约意愿汇总</h6></div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="p-3 rounded text-center" style="background:#ecfdf5;border:1px solid #a7f3d0;">
+          <div style="font-size:32px;font-weight:700;color:#059669;">{{ summary_stats.rebook_yes or 0 }}</div>
+          <div style="font-size:13px;color:#7b88a1;">愿意复约（{{ summary_stats.rebook_rate }}%）</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="p-3 rounded text-center" style="background:#fffbeb;border:1px solid #fde68a;">
+          <div style="font-size:32px;font-weight:700;color:#d97706;">{{ summary_stats.rebook_undecided or 0 }}</div>
+          <div style="font-size:13px;color:#7b88a1;">尚未决定</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="p-3 rounded text-center" style="background:#fef2f2;border:1px solid #fecaca;">
+          <div style="font-size:32px;font-weight:700;color:#bf616a;">{{ summary_stats.rebook_no or 0 }}</div>
+          <div style="font-size:13px;color:#7b88a1;">不再预约</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

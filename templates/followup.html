@@ -1,0 +1,218 @@
+{% extends "_base_app.html" %}
+{% block title %}回访记录查询{% endblock %}
+{% block page_title %}<i class="bi bi-chat-left-heart me-1"></i>回访记录查询{% endblock %}
+{% block content %}
+<div class="card-panel mb-4">
+  <div class="card-header"><h6 class="mb-0"><i class="bi bi-funnel me-1"></i>筛选条件</h6></div>
+  <div class="card-body">
+    <form method="get" action="/followup" class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label small">匿名编码</label>
+        <input type="text" name="code" class="form-control form-control-sm" value="{{ filters.anonymous_code }}" placeholder="编码搜索">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">咨询师</label>
+        <select name="counselor_id" class="form-select form-select-sm">
+          <option value="">全部</option>
+          {% for c in counselors %}
+          <option value="{{ c.id }}" {% if filters.counselor_id == c.id|string %}selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small">满意度≥</label>
+        <input type="number" name="satisfaction_min" class="form-control form-control-sm" value="{{ filters.satisfaction_min }}" min="1" max="5">
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small">满意度≤</label>
+        <input type="number" name="satisfaction_max" class="form-control form-control-sm" value="{{ filters.satisfaction_max }}" min="1" max="5">
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small">复约意愿</label>
+        <select name="rebook" class="form-select form-select-sm">
+          <option value="">全部</option>
+          <option value="yes" {% if filters.rebook_willingness == 'yes' %}selected{% endif %}>愿意</option>
+          <option value="no" {% if filters.rebook_willingness == 'no' %}selected{% endif %}>不愿意</option>
+          <option value="undecided" {% if filters.rebook_willingness == 'undecided' %}selected{% endif %}>待定</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small">异常标记</label>
+        <select name="abnormal" class="form-select form-select-sm">
+          <option value="">全部</option>
+          <option value="1" {% if filters.is_abnormal == '1' %}selected{% endif %}>仅异常</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small">高风险</label>
+        <select name="high_risk" class="form-select form-select-sm">
+          <option value="">全部</option>
+          <option value="1" {% if filters.is_high_risk == '1' %}selected{% endif %}>仅高风险</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small">开始日期</label>
+        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ filters.date_from }}">
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small">结束日期</label>
+        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ filters.date_to }}">
+      </div>
+      <div class="col-md-1">
+        <button type="submit" class="btn btn-sm btn-primary-bs w-100"><i class="bi bi-search"></i> 查询</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="text-secondary" style="font-size:13px;">共 <b>{{ surveys|length }}</b> 条记录（匿名编码已脱敏处理）</div>
+  <div>
+    <a href="/followup/analytics" class="btn btn-sm btn-outline-primary"><i class="bi bi-bar-chart-line me-1"></i>满意度分析</a>
+    <a href="/anonymous/followup" target="_blank" class="btn btn-sm btn-outline-success"><i class="bi bi-box-arrow-up-right me-1"></i>回访入口</a>
+  </div>
+</div>
+
+<div class="card-panel">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+      <thead class="table-light">
+        <tr>
+          <th>匿名编码</th>
+          <th>预约编号</th>
+          <th>咨询日期</th>
+          <th>咨询师</th>
+          <th>满意度</th>
+          <th>复约意愿</th>
+          <th>异常</th>
+          <th>高风险</th>
+          <th>回访时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if surveys %}
+        {% for s in surveys %}
+        <tr>
+          <td><code style="font-size:12px;">{{ s.masked_code }}</code></td>
+          <td>{{ s.appointment_no or '' }}</td>
+          <td>{{ s.appointment_date or '' }}</td>
+          <td>{{ s.counselor_name or '' }}</td>
+          <td>
+            {% if s.satisfaction_score %}
+            <span class="badge {% if s.satisfaction_score >= 4 %}badge-checked{% elif s.satisfaction_score >= 3 %}bg-warning text-dark{% else %}badge-noshow{% endif %}">
+              {{ s.satisfaction_score }}分
+            </span>
+            {% else %}
+            <span class="text-secondary">未评</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if s.rebook_willingness == 'yes' %}<span class="badge badge-checked">愿意</span>
+            {% elif s.rebook_willingness == 'no' %}<span class="badge badge-noshow">不愿意</span>
+            {% else %}<span class="badge bg-secondary">待定</span>{% endif %}
+          </td>
+          <td>
+            {% if s.is_abnormal %}
+            <span class="badge badge-noshow"><i class="bi bi-exclamation-triangle-fill me-1"></i>异常</span>
+            {% else %}
+            <span class="text-secondary">-</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if s.is_high_risk %}
+            <span class="badge bg-danger"><i class="bi bi-exclamation-octagon-fill me-1"></i>高风险</span>
+            {% else %}
+            <span class="text-secondary">-</span>
+            {% endif %}
+          </td>
+          <td style="font-size:12px;color:#7b88a1;">{{ s.created_at[:16] if s.created_at else '' }}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary" onclick="viewFollowupDetail({{ s.id }})">
+              <i class="bi bi-eye"></i>
+            </button>
+            {% if can_manage and not s.is_abnormal %}
+            <button class="btn btn-sm btn-outline-warning" onclick="markAbnormal({{ s.id }})">
+              <i class="bi bi-flag"></i>
+            </button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% else %}
+        <tr><td colspan="10" class="text-center py-4 text-secondary">暂无回访记录</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">回访详情</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detailBody">
+        <div class="text-center py-3"><div class="spinner-border spinner-border-sm me-2"></div>加载中...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function viewFollowupDetail(surveyId) {
+  var modal = new bootstrap.Modal(document.getElementById('detailModal'));
+  document.getElementById('detailBody').innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm me-2"></div>加载中...</div>';
+  modal.show();
+  fetch('/api/followup/' + surveyId)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var html = '<div class="row g-3">';
+      html += '<div class="col-md-6"><div class="p-3 rounded" style="background:#f8fafc;"><div class="small text-secondary mb-1">匿名编码</div><code>' + (d.masked_code||'') + '</code></div></div>';
+      html += '<div class="col-md-6"><div class="p-3 rounded" style="background:#f8fafc;"><div class="small text-secondary mb-1">预约编号</div>' + (d.appointment_no||'') + '</div></div>';
+      html += '<div class="col-md-6"><div class="p-3 rounded" style="background:#f8fafc;"><div class="small text-secondary mb-1">咨询日期</div>' + (d.appointment_date||'') + ' ' + (d.start_time||'').substring(0,5) + '-' + (d.end_time||'').substring(0,5) + '</div></div>';
+      html += '<div class="col-md-6"><div class="p-3 rounded" style="background:#f8fafc;"><div class="small text-secondary mb-1">咨询师</div>' + (d.counselor_name||'') + '</div></div>';
+      html += '<div class="col-md-4"><div class="p-3 rounded text-center" style="background:' + (d.satisfaction_score>=4?'#ecfdf5':d.satisfaction_score>=3?'#fffbeb':'#fef2f2') + ';"><div style="font-size:28px;font-weight:700;color:' + (d.satisfaction_score>=4?'#059669':d.satisfaction_score>=3?'#d97706':'#bf616a') + ';">' + (d.satisfaction_score||'-') + '</div><div class="small text-secondary">满意度评分</div></div></div>';
+      var rebookLabel = d.rebook_willingness==='yes'?'愿意':d.rebook_willingness==='no'?'不愿意':'待定';
+      var rebookColor = d.rebook_willingness==='yes'?'#ecfdf5':d.rebook_willingness==='no'?'#fef2f2':'#f8fafc';
+      html += '<div class="col-md-4"><div class="p-3 rounded text-center" style="background:' + rebookColor + ';"><div style="font-size:20px;font-weight:600;">' + rebookLabel + '</div><div class="small text-secondary">复约意愿</div></div></div>';
+      var statusBg = d.is_high_risk?'#fef2f2':d.is_abnormal?'#fffbeb':'#ecfdf5';
+      var statusText = d.is_high_risk?'高风险':d.is_abnormal?'异常':'正常';
+      html += '<div class="col-md-4"><div class="p-3 rounded text-center" style="background:' + statusBg + ';"><div style="font-size:20px;font-weight:600;color:' + (d.is_high_risk?'#bf616a':d.is_abnormal?'#d97706':'#059669') + ';">' + statusText + '</div><div class="small text-secondary">状态</div></div></div>';
+      if(d.abnormal_reason) {
+        html += '<div class="col-12"><div class="p-3 rounded" style="background:#fef2f2;border:1px solid #fecaca;"><div class="small text-secondary mb-1">异常原因</div><span style="color:#bf616a;">' + d.abnormal_reason + '</span></div></div>';
+      }
+      if(d.parsed_responses && Object.keys(d.parsed_responses).length > 0) {
+        html += '<div class="col-12"><div class="p-3 rounded" style="background:#f8fafc;"><div class="small text-secondary mb-2">问卷回答</div>';
+        for(var key in d.parsed_responses) {
+          html += '<div class="mb-2"><span class="fw-bold" style="font-size:13px;">' + key + '：</span><span style="font-size:13px;">' + d.parsed_responses[key] + '</span></div>';
+        }
+        html += '</div></div>';
+      }
+      if(d.comment) {
+        html += '<div class="col-12"><div class="p-3 rounded" style="background:#f0f4f8;"><div class="small text-secondary mb-1">学生留言</div><div style="font-size:13px;line-height:1.6;">' + d.comment + '</div></div></div>';
+      }
+      html += '<div class="col-12"><div class="small text-secondary">回访时间：' + (d.created_at||'') + '</div></div>';
+      html += '</div>';
+      document.getElementById('detailBody').innerHTML = html;
+    })
+    .catch(function(e){ document.getElementById('detailBody').innerHTML = '<div class="text-center text-danger py-3">加载失败</div>'; });
+}
+
+function markAbnormal(surveyId) {
+  var reason = prompt('请输入标记异常的原因：');
+  if(!reason) return;
+  fetch('/api/followup/abnormal', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({survey_id: surveyId, is_abnormal: 1, abnormal_reason: reason})
+  }).then(function(r){ return r.json(); })
+    .then(function(d){ if(d.success) { toastMsg('已标记为异常'); setTimeout(function(){ window.location.reload(); }, 800); } else { toastMsg(d.error||'操作失败','error'); } })
+    .catch(function(){ toastMsg('操作失败','error'); });
+}
+</script>
+{% endblock %}

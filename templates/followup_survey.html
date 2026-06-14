@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>匿名回访 - 校园心理咨询中心</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%); min-height: 100vh; }
+.header-banner { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 30px 0; }
+.anony-input { padding: 14px; font-size: 16px; letter-spacing: 1px; font-weight: 600; }
+.star-rating { display: flex; gap: 4px; }
+.star-rating .star { font-size: 28px; cursor: pointer; color: #d1d5db; transition: color .2s; }
+.star-rating .star.active { color: #f59e0b; }
+.star-rating .star:hover { color: #fbbf24; }
+.choice-option { border: 2px solid #e5e9f0; border-radius: 10px; padding: 10px 16px; cursor: pointer; transition: all .2s; background: #fff; }
+.choice-option:hover { border-color: #667eea; }
+.choice-option.selected { border-color: #667eea; background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); }
+.privacy-note { background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 16px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+var selectedAppointment = null;
+var selectedScore = 0;
+var selectedRebook = null;
+var questionResponses = {};
+
+function toastMsg(msg, type) {
+  type = type || 'success';
+  var id = 'toast_' + Date.now();
+  var colors = { success: 'bg-success text-white', error: 'bg-danger text-white', warning: 'bg-warning text-dark' };
+  var icons = { success: 'bi-check-circle-fill', error: 'bi-exclamation-triangle-fill', warning: 'bi-exclamation-circle-fill' };
+  var container = document.getElementById('toast-container');
+  container.insertAdjacentHTML('beforeend', '<div class="toast align-items-center '+colors[type]+' border-0" id="'+id+'" role="alert"><div class="d-flex"><div class="toast-body"><i class="bi '+icons[type]+' me-2"></i>'+msg+'</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>');
+  var t = new bootstrap.Toast(document.getElementById(id), { delay: 3000 });
+  t.show();
+}
+
+function loadAppointments() {
+  var code = document.getElementById('anonymous_code').value.trim();
+  if (!code) { toastMsg('请输入匿名编码', 'warning'); return; }
+  window.location.href = '/anonymous/followup?code=' + encodeURIComponent(code);
+}
+
+function selectAppointment(aptId) {
+  selectedAppointment = aptId;
+  document.querySelectorAll('.apt-card').forEach(function(el) {
+    el.classList.remove('selected');
+    el.style.borderColor = '#e5e9f0';
+    el.style.background = '#fff';
+  });
+  var el = document.getElementById('apt-' + aptId);
+  if (el) {
+    el.classList.add('selected');
+    el.style.borderColor = '#667eea';
+    el.style.background = 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)';
+  }
+  document.getElementById('surveySection').style.display = 'block';
+  document.getElementById('surveySection').scrollIntoView({ behavior: 'smooth' });
+}
+
+function setScore(score) {
+  selectedScore = score;
+  document.querySelectorAll('.star-rating .star').forEach(function(el, idx) {
+    if (idx < score) { el.classList.add('active'); } else { el.classList.remove('active'); }
+  });
+  document.getElementById('scoreLabel').textContent = ['', '非常不满意', '不满意', '一般', '满意', '非常满意'][score];
+}
+
+function setRebook(val) {
+  selectedRebook = val;
+  document.querySelectorAll('.rebook-option').forEach(function(el) {
+    el.classList.remove('selected');
+  });
+  var el = document.getElementById('rebook-' + val);
+  if (el) el.classList.add('selected');
+}
+
+function selectChoice(qId, val) {
+  questionResponses[qId] = val;
+  document.querySelectorAll('.choice-option[data-qid="'+qId+'"]').forEach(function(el) {
+    el.classList.remove('selected');
+  });
+  var el = document.getElementById('qopt-' + qId + '-' + val.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g,''));
+  if (el) el.classList.add('selected');
+}
+
+function submitSurvey() {
+  if (!selectedAppointment) { toastMsg('请先选择咨询记录', 'warning'); return; }
+  if (selectedScore === 0) { toastMsg('请选择满意度评分', 'warning'); return; }
+  if (!selectedRebook) { toastMsg('请选择复约意愿', 'warning'); return; }
+
+  var responses = {};
+  document.querySelectorAll('[data-question-id]').forEach(function(el) {
+    var qId = el.getAttribute('data-question-id');
+    var qType = el.getAttribute('data-question-type');
+    if (qType === 'text') {
+      var input = el.querySelector('textarea');
+      if (input && input.value.trim()) responses[qId] = input.value.trim();
+    } else if (qType === 'rating') {
+      var ratingEl = el.querySelector('.rating-value');
+      if (ratingEl && ratingEl.value) responses[qId] = parseInt(ratingEl.value);
+    }
+  });
+  for (var key in questionResponses) {
+    responses[key] = questionResponses[key];
+  }
+
+  var comment = document.getElementById('comment').value.trim();
+
+  fetch('/api/followup/submit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      appointment_id: selectedAppointment,
+      anonymous_code: document.getElementById('hidden_code').value,
+      satisfaction_score: selectedScore,
+      rebook_willingness: selectedRebook,
+      responses: responses,
+      comment: comment
+    })
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) {
+        document.getElementById('surveyForm').innerHTML = '<div class="text-center py-5"><i class="bi bi-check-circle" style="font-size:64px;color:#a3be8c;"></i><h4 class="mt-3">感谢您的回访反馈</h4><p class="text-secondary">您的回答已匿名提交，我们将持续改进服务质量</p></div>';
+      } else {
+        toastMsg(d.error || '提交失败', 'error');
+      }
+    })
+    .catch(function() { toastMsg('提交失败，请重试', 'error'); });
+}
+</script>
+</head>
+<body>
+<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index:9999;"></div>
+
+<div class="header-banner">
+  <div class="container" style="max-width:640px;">
+    <div class="text-center">
+      <i class="bi bi-chat-left-heart" style="font-size:40px;"></i>
+      <h4 class="mt-2 mb-1">咨询回访问卷</h4>
+      <p style="opacity:0.85;font-size:14px;">您的反馈对改进咨询服务至关重要</p>
+    </div>
+  </div>
+</div>
+
+<div class="container mt-4 mb-5" style="max-width:640px;">
+  {% if error %}
+  <div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>{{ error }}</div>
+  {% endif %}
+
+  <div class="privacy-note mb-4">
+    <div class="d-flex align-items-start gap-2">
+      <i class="bi bi-shield-lock-fill" style="font-size:20px;color:#bf616a;"></i>
+      <div>
+        <div style="font-weight:600;color:#991b1b;">隐私保护声明</div>
+        <div style="font-size:13px;color:#7f1d1d;line-height:1.5;">本回访完全匿名，不会收集您的真实姓名、学号等身份信息。所有数据仅用于改进咨询服务质量，请放心填写。</div>
+      </div>
+    </div>
+  </div>
+
+  {% if not anonymous_code %}
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4">
+      <h6 class="mb-3"><i class="bi bi-key me-2"></i>请输入您的匿名编码</h6>
+      <div class="input-group">
+        <input type="text" id="anonymous_code" class="form-control anony-input" placeholder="请输入预约时获取的匿名编码" maxlength="20">
+        <button class="btn btn-primary" onclick="loadAppointments()"><i class="bi bi-arrow-right"></i></button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if anonymous_code %}
+  <input type="hidden" id="hidden_code" value="{{ anonymous_code }}">
+
+  {% if appointments %}
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4">
+      <h6 class="mb-3"><i class="bi bi-calendar-check me-2"></i>选择需要回访的咨询记录</h6>
+      {% for apt in appointments %}
+      <div class="apt-card mb-3 p-3 rounded" id="apt-{{ apt.id }}" style="border:2px solid #e5e9f0;cursor:pointer;transition:all .2s;" onclick="selectAppointment({{ apt.id }})">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div style="font-weight:600;">{{ apt.appointment_date }} {{ apt.start_time[:5] }}-{{ apt.end_time[:5] }}</div>
+            <div class="text-secondary" style="font-size:13px;"><i class="bi bi-person me-1"></i>{{ apt.counselor_name }} · <i class="bi bi-door-open me-1"></i>{{ apt.room_number }}</div>
+          </div>
+          <div class="text-secondary"><i class="bi bi-circle" style="font-size:20px;"></i></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div id="surveySection" style="display:none;">
+  <div id="surveyForm">
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4">
+      <h6 class="mb-3"><i class="bi bi-star me-2"></i>满意度评分</h6>
+      <div class="star-rating mb-2">
+        {% for i in range(1, 6) %}
+        <span class="star" onclick="setScore({{ i }})"><i class="bi bi-star-fill"></i></span>
+        {% endfor %}
+      </div>
+      <div id="scoreLabel" class="text-secondary" style="font-size:14px;">请点击星星评分</div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4">
+      <h6 class="mb-3"><i class="bi bi-arrow-repeat me-2"></i>复约意愿</h6>
+      <div class="d-flex gap-3">
+        <div class="choice-option rebook-option flex-fill text-center" id="rebook-yes" onclick="setRebook('yes')">
+          <i class="bi bi-hand-thumbs-up" style="font-size:24px;color:#a3be8c;"></i>
+          <div class="mt-1" style="font-size:13px;font-weight:600;">愿意复约</div>
+        </div>
+        <div class="choice-option rebook-option flex-fill text-center" id="rebook-undecided" onclick="setRebook('undecided')">
+          <i class="bi bi-question-circle" style="font-size:24px;color:#ebcb8b;"></i>
+          <div class="mt-1" style="font-size:13px;font-weight:600;">尚未决定</div>
+        </div>
+        <div class="choice-option rebook-option flex-fill text-center" id="rebook-no" onclick="setRebook('no')">
+          <i class="bi bi-hand-thumbs-down" style="font-size:24px;color:#bf616a;"></i>
+          <div class="mt-1" style="font-size:13px;font-weight:600;">不再预约</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if questions %}
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4">
+      <h6 class="mb-3"><i class="bi bi-chat-dots me-2"></i>回访问卷</h6>
+      {% for q in questions %}
+      <div class="mb-4" data-question-id="{{ q.id }}" data-question-type="{{ q.question_type }}">
+        <div style="font-weight:600;font-size:14px;" class="mb-2">{{ loop.index }}. {{ q.question_text }}</div>
+        {% if q.question_type == 'choice' and q.parsed_options %}
+          <div class="d-flex flex-wrap gap-2">
+          {% for opt in q.parsed_options %}
+            <div class="choice-option" onclick="selectChoice('{{ q.id }}', '{{ opt }}')">
+              <span style="font-size:13px;">{{ opt }}</span>
+            </div>
+          {% endfor %}
+          </div>
+        {% elif q.question_type == 'text' %}
+          <textarea class="form-control form-control-sm" rows="2" placeholder="请输入您的回答"></textarea>
+        {% elif q.question_type == 'rating' %}
+          <div class="d-flex gap-1">
+            {% for i in range(1, 6) %}
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="this.parentElement.querySelectorAll('.btn').forEach(function(b){b.classList.remove('btn-primary-bs','text-white');});this.classList.add('btn-primary-bs','text-white');this.parentElement.querySelector('.rating-value').value={{ i }};" style="border-radius:50%;width:36px;height:36px;">{{ i }}</button>
+            {% endfor %}
+            <input type="hidden" class="rating-value" value="">
+          </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4">
+      <h6 class="mb-3"><i class="bi bi-pencil me-2"></i>补充留言（选填）</h6>
+      <textarea id="comment" class="form-control" rows="3" placeholder="如有其他建议或想法，请在此填写..."></textarea>
+    </div>
+  </div>
+
+  <div class="text-center mb-4">
+    <button class="btn btn-primary btn-lg px-5" onclick="submitSurvey()">
+      <i class="bi bi-send me-2"></i>提交回访
+    </button>
+  </div>
+  </div>
+  </div>
+
+  {% else %}
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4 text-center">
+      <i class="bi bi-check2-circle" style="font-size:48px;color:#a3be8c;"></i>
+      <h5 class="mt-3">暂无可回访的咨询记录</h5>
+      <p class="text-secondary">可能您已完成所有回访，或尚未有已完成的咨询</p>
+      <a href="/anonymous/followup" class="btn btn-outline-primary mt-2"><i class="bi bi-arrow-left me-1"></i>重新输入编码</a>
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+
+<div class="text-center py-4 text-secondary" style="font-size:12px;background:rgba(255,255,255,0.5);">
+  &copy; {{ year }} 校园心理咨询中心 · 您的隐私受到严格保护
+</div>
+</body>
+</html>
