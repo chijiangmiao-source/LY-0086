@@ -41,17 +41,62 @@ function selectSlot(sid, card) {
   document.getElementById('selected_slot_info').style.display = 'block';
   document.getElementById('btn_submit').disabled = false;
   document.getElementById('selected_sid').value = sid;
-  htmx.ajax('POST', '/api/anonymous/book/check', {
-    values: { anonymous_code: document.getElementById('anon_code').value, schedule_id: sid, target_date: document.getElementById('target_date').value },
-    target: '#check_result', swap: 'innerHTML', headers: {'Content-Type':'application/json'}
-  }).then(function(r){ try { var d = JSON.parse(r.xhr.responseText); if (d.ok) { document.getElementById('confirm_info').innerHTML = '<div class="alert alert-success mb-0" style="font-size:13px;"><i class="bi bi-check-circle me-1"></i>校验通过：<b>'+d.schedule.counselor_name+'</b> · '+d.schedule.date+' '+d.schedule.start_time+'-'+d.schedule.end_time+' · 房间 <b>'+d.schedule.room_number+'</b></div>'; document.getElementById('confirm_section').style.display='block'; } } catch(e) {} });
+  var code = document.getElementById('anon_code').value.trim();
+  if(code.length >= 4) {
+    document.getElementById('check_result').innerHTML = '<span class="text-secondary">正在校验...</span>';
+    fetch('/api/anonymous/book/check', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ anonymous_code: code, schedule_id: sid, target_date: document.getElementById('target_date').value })
+    }).then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d.ok) {
+          document.getElementById('confirm_info').innerHTML = '<div class="alert alert-success mb-0" style="font-size:13px;"><i class="bi bi-check-circle me-1"></i>校验通过：<b>'+d.schedule.counselor_name+'</b> · '+d.schedule.date+' '+d.schedule.start_time+'-'+d.schedule.end_time+' · 房间 <b>'+d.schedule.room_number+'</b></div>';
+          document.getElementById('confirm_section').style.display='block';
+        }
+      }).catch(function(e){
+        document.getElementById('confirm_section').style.display='none';
+      });
+  }
 }
-document.addEventListener('htmx:responseError', function(evt){ try { var d = JSON.parse(evt.detail.xhr.responseText); if (d && d.error) toastMsg(d.error, 'error'); document.getElementById('confirm_section').style.display='none'; document.getElementById('btn_submit').disabled = true; } catch(e) {} });
+function submitBooking() {
+  if(!selectedSchedule) { toastMsg('请先选择一个时段', 'warning'); return; }
+  var code = document.getElementById('anon_code').value.trim();
+  if(!code || code.length < 4) { toastMsg('请输入有效的匿名识别码', 'warning'); return; }
+  var btn = document.getElementById('btn_submit');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>提交中...';
+  fetch('/api/anonymous/book/submit', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      anonymous_code: code,
+      schedule_id: selectedSchedule,
+      target_date: document.getElementById('target_date').value
+    })
+  }).then(function(r){
+    if(r.ok) {
+      return r.text();
+    } else {
+      return r.json().then(function(d){ throw new Error(d.error || '预约失败'); });
+    }
+  }).then(function(html){
+    document.getElementById('result_area').innerHTML = html;
+    btn.textContent = '预约成功，可关闭页面';
+    btn.disabled = true;
+    document.getElementById('result_area').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    toastMsg('预约成功！请牢记预约信息', 'success');
+  }).catch(function(e){
+    toastMsg(e.message || '预约失败', 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-send me-1"></i>确认提交预约';
+  });
+}
 document.addEventListener('DOMContentLoaded', function(){
   document.getElementById('book_form').addEventListener('submit', function(e){
     e.preventDefault();
-    if (!selectedSchedule) { toastMsg('请先选择一个时段', 'warning'); return false; }
-    return true;
+    submitBooking();
+    return false;
   });
 });
 </script>
@@ -97,10 +142,7 @@ document.addEventListener('DOMContentLoaded', function(){
     </div>
   </div>
 
-  <form id="book_form" hx-post="/api/anonymous/book/submit"
-    hx-vals='js:{"anonymous_code": document.getElementById("anon_code").value.trim(), "schedule_id": parseInt(document.getElementById("selected_sid").value || "0"), "target_date": document.getElementById("target_date").value}'
-    hx-headers='{"Content-Type":"application/json"}'
-    hx-target="#result_area" hx-swap="innerHTML">
+  <form id="book_form" onsubmit="return false;">
 
   <div class="row g-4">
     <div class="col-md-8">

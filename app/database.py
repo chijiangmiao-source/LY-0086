@@ -6,9 +6,11 @@ from config import DB_PATH, NO_SHOW_THRESHOLD, COOLDOWN_DAYS, ROOM_UTILIZATION_H
 
 def get_conn():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
     return conn
 
 def _column_exists(table_name, column_name):
@@ -1186,6 +1188,7 @@ def update_followup_question(question_id, question_text=None, question_type=None
 def get_eligible_appointments_for_followup(anonymous_code):
     conn = get_conn()
     c = conn.cursor()
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     c.execute("""SELECT a.*, cou.name as counselor_name, r.room_number
                  FROM appointments a
                  JOIN counselors cou ON a.counselor_id = cou.id
@@ -1193,8 +1196,9 @@ def get_eligible_appointments_for_followup(anonymous_code):
                  WHERE a.anonymous_code = ?
                  AND a.checkin_status = 'checked_in'
                  AND a.id NOT IN (SELECT appointment_id FROM followup_surveys)
+                 AND DATETIME(a.appointment_date || ' ' || a.end_time) <= ?
                  ORDER BY a.appointment_date DESC, a.start_time DESC""",
-              (anonymous_code,))
+              (anonymous_code, now))
     rows = dict_rows(c.fetchall())
     conn.close()
     return rows
@@ -1330,11 +1334,47 @@ def get_followup_survey_by_appointment(appointment_id):
     conn.close()
     return row
 
-def mark_followup_abnormal(survey_id, is_abnormal, abnormal_reason=''):
+def mark_followup_abnormal(survey_id, is_abnormal, abnormal_reason='', is_high_risk=None, high_risk_reason=None):
     conn = get_conn()
     c = conn.cursor()
-    c.execute("UPDATE followup_surveys SET is_abnormal = ?, abnormal_reason = ? WHERE id = ?",
-              (is_abnormal, abnormal_reason, survey_id))
+    updates = []
+    params = []
+    if is_abnormal is not None:
+        updates.append("is_abnormal = ?")
+        params.append(is_abnormal)
+        updates.append("abnormal_reason = ?")
+        params.append(abnormal_reason if abnormal_reason else None)
+    if is_high_risk is not None:
+        updates.append("is_high_risk = ?")
+        params.append(is_high_risk)
+        updates.append("high_risk_reason = ?")
+        params.append(high_risk_reason if high_risk_reason else None)
+    if updates:
+        params.append(survey_id)
+        c.execute(f"UPDATE followup_surveys SET {', '.join(updates)} WHERE id = ?", params)
+        if is_high_risk == 1:
+            c.execute("""SELECT fs.*, a.appointment_no, a.appointment_date, a.start_time
+                         FROM followup_surveys fs
+                         LEFT JOIN appointments a ON fs.appointment_id = a.id
+                         WHERE fs.id = ?""", (survey_id,))
+            row = dict_row(c.fetchone())
+            if row:
+                c.execute("""SELECT id FROM risk_warnings 
+                             WHERE appointment_id = ? AND warning_type = 'followup_manual_high_risk' AND is_resolved = 0""",
+                          (row.get('appointment_id'),))
+                if not c.fetchone():
+                    c.execute("""INSERT INTO risk_warnings
+                                 (anonymous_user_id, anonymous_code, warning_type, risk_level, description, appointment_id)
+                                 VALUES (?, ?, 'followup_manual_high_risk', 'high', ?, ?)""",
+                              (row.get('anonymous_user_id'), row.get('anonymous_code'),
+                               f'人工标记高风险：{high_risk_reason or abnormal_reason or "人工标记"}',
+                               row.get('appointment_id')))
+                    c.execute("""INSERT INTO notifications (user_id, notification_type, title, content, related_appointment_id)
+                                 SELECT u.id, 'followup_alert', ?, ?, ?
+                                 FROM users u WHERE u.role IN ('admin', 'intervention')""",
+                              (f'回访高风险预警：人工标记',
+                               f'工作人员手动标记回访为高风险。原因：{high_risk_reason or abnormal_reason or "人工标记"}',
+                               row.get('appointment_id')))
     conn.commit()
     conn.close()
 

@@ -182,8 +182,18 @@ class FollowupSurveySubmitApi:
 
         if apt['checkin_status'] != 'checked_in':
             resp.status = falcon.HTTP_400
-            resp.media = {'error': '只有已完成的咨询才能填写回访'}
+            resp.media = {'error': '只有已签到的咨询才能填写回访'}
             return
+
+        end_time_str = f"{apt['appointment_date']} {apt['end_time']}"
+        try:
+            end_dt = datetime.strptime(end_time_str, '%Y-%m-%d %H:%M')
+            if datetime.now() < end_dt:
+                resp.status = falcon.HTTP_400
+                resp.media = {'error': '咨询尚未结束，请在咨询结束后再填写回访'}
+                return
+        except (ValueError, TypeError):
+            pass
 
         existing = get_followup_survey_by_appointment(appointment_id)
         if existing:
@@ -248,11 +258,17 @@ class FollowupMarkAbnormalApi:
         survey_id = form.get('survey_id')
         is_abnormal = form.get('is_abnormal', 1)
         abnormal_reason = (form.get('abnormal_reason') or '').strip()
+        is_high_risk = form.get('is_high_risk')
+        high_risk_reason = (form.get('high_risk_reason') or '').strip()
         if not survey_id:
             resp.status = falcon.HTTP_400
             resp.media = {'error': '缺少回访记录ID'}
             return
-        mark_followup_abnormal(survey_id, is_abnormal, abnormal_reason)
+        if is_high_risk is None:
+            is_high_risk = 1 if is_abnormal == 1 and '高风险' in abnormal_reason else None
+        if is_high_risk == 1 and not high_risk_reason:
+            high_risk_reason = abnormal_reason or '人工标记高风险'
+        mark_followup_abnormal(survey_id, is_abnormal, abnormal_reason, is_high_risk, high_risk_reason)
         resp.media = {'success': True}
 
 class FollowupQuestionsApi:

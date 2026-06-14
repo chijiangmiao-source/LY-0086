@@ -9,7 +9,8 @@ from app.database import (get_conn, dict_rows, dict_row, generate_appointment_no
                           check_appointment_counselor_conflict,
                           check_appointment_room_conflict,
                           check_abnormal_booking, create_risk_warning,
-                          update_risk_level, get_anonymous_user)
+                          update_risk_level, get_anonymous_user,
+                          calculate_risk_level)
 from config import CHECKIN_WINDOW_MINUTES_BEFORE, CHECKIN_WINDOW_MINUTES_AFTER, NO_SHOW_THRESHOLD, COOLDOWN_DAYS
 
 class AnonymousBookPage:
@@ -154,6 +155,8 @@ class AnonymousBookSubmit:
 
         is_abnormal, abnormal_reasons = check_abnormal_booking(anonymous_code, target_date)
 
+        au = create_or_get_anonymous_user(anonymous_code)
+
         conn = get_conn()
         conn.execute("BEGIN IMMEDIATE")
         try:
@@ -198,7 +201,6 @@ class AnonymousBookSubmit:
                 resp.media = {'error': f'房间冲突：{sched["room_id"]}号房间 在 {sched["start_time"]}-{sched["end_time"]} 已被 {room_conflict["counselor_name"]} 预约'}
                 return
 
-            au = create_or_get_anonymous_user(anonymous_code)
             apt_no = generate_appointment_no()
 
             is_abnormal_flag = 1 if is_abnormal else 0
@@ -214,7 +216,11 @@ class AnonymousBookSubmit:
             apt_id = c.lastrowid
 
             if is_abnormal:
-                risk_level, risk_reason = update_risk_level(au['id'])
+                risk_level, risk_reason = calculate_risk_level(au['id'])
+                c.execute("""UPDATE anonymous_users 
+                             SET risk_level = ?, risk_reason = ?, risk_updated_at = ? 
+                             WHERE id = ?""",
+                          (risk_level, risk_reason, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), au['id']))
                 if risk_level in ('medium', 'high'):
                     c.execute("""INSERT INTO risk_warnings 
                         (anonymous_user_id, anonymous_code, warning_type, risk_level, description, appointment_id)

@@ -54,7 +54,7 @@ def verify_user(username, password):
 class AuthMiddleware:
     def __init__(self, exempt_paths=None):
         self.exempt = exempt_paths or []
-        self.exempt_prefixes = ['/static/', '/login', '/api/public', '/anonymous']
+        self.exempt_prefixes = ['/static/', '/login', '/api/public', '/anonymous', '/api/anonymous', '/api/followup/submit']
 
     def _is_exempt(self, path):
         if path in self.exempt:

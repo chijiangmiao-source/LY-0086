@@ -204,15 +204,40 @@ function viewFollowupDetail(surveyId) {
 }
 
 function markAbnormal(surveyId) {
-  var reason = prompt('请输入标记异常的原因：');
-  if(!reason) return;
-  fetch('/api/followup/abnormal', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({survey_id: surveyId, is_abnormal: 1, abnormal_reason: reason})
-  }).then(function(r){ return r.json(); })
-    .then(function(d){ if(d.success) { toastMsg('已标记为异常'); setTimeout(function(){ window.location.reload(); }, 800); } else { toastMsg(d.error||'操作失败','error'); } })
-    .catch(function(){ toastMsg('操作失败','error'); });
+  var html = '<div class="mb-3"><label class="form-label small fw-bold">异常原因</label><textarea class="form-control form-control-sm" id="abn_reason" rows="2" placeholder="请输入标记异常的原因"></textarea></div>';
+  html += '<div class="mb-3"><div class="form-check"><input class="form-check-input" type="checkbox" id="abn_highrisk" checked><label class="form-check-label small" for="abn_highrisk">同时标记为高风险（触发风险预警和通知）</label></div></div>';
+  html += '<div class="mb-3"><label class="form-label small fw-bold">高风险原因</label><input type="text" class="form-control form-control-sm" id="abn_highrisk_reason" placeholder="留空则使用异常原因"></div>';
+  var modalId = openModal('标记异常', html, 'md');
+  document.getElementById(modalId).addEventListener('shown.bs.modal', function() {
+    document.getElementById('abn_highrisk').addEventListener('change', function() {
+      document.getElementById('abn_highrisk_reason').disabled = !this.checked;
+    });
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-warning';
+    saveBtn.innerHTML = '<i class="bi bi-flag-fill me-1"></i>确认标记';
+    saveBtn.onclick = function() {
+      var reason = document.getElementById('abn_reason').value.trim();
+      var highrisk = document.getElementById('abn_highrisk').checked ? 1 : 0;
+      var highriskReason = document.getElementById('abn_highrisk_reason').value.trim();
+      if(!reason) { toastMsg('请输入异常原因', 'warning'); return; }
+      fetch('/api/followup/abnormal', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({survey_id: surveyId, is_abnormal: 1, abnormal_reason: reason, is_high_risk: highrisk, high_risk_reason: highriskReason})
+      }).then(function(r){ return r.json(); })
+        .then(function(d){ if(d.success) { toastMsg('已标记为异常'); setTimeout(function(){ window.location.reload(); }, 800); } else { toastMsg(d.error||'操作失败','error'); } })
+        .catch(function(){ toastMsg('操作失败','error'); });
+    };
+    var footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-outline-secondary';
+    cancelBtn.textContent = '取消';
+    cancelBtn.setAttribute('data-bs-dismiss', 'modal');
+    footer.appendChild(cancelBtn);
+    footer.appendChild(saveBtn);
+    document.querySelector('#' + modalId + ' .modal-content').appendChild(footer);
+  });
 }
 </script>
 {% endblock %}
