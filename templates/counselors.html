@@ -1,0 +1,89 @@
+{% extends "_base_app.html" %}
+{% block title %}咨询师管理{% endblock %}
+{% block page_title %}<i class="bi bi-people me-1"></i>咨询师管理{% endblock %}
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-md-5">
+    <div class="card-panel">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-person-plus me-1"></i>新增咨询师</h6></div>
+      <div class="card-body">
+        <form id="counselorForm" hx-post="/api/counselors"
+          hx-vals='js:{"name": document.getElementById("c_name").value, "title": document.getElementById("c_title").value, "specialty": document.getElementById("c_spec").value, "phone": document.getElementById("c_phone").value, "email": document.getElementById("c_email").value}'
+          hx-headers='{"Content-Type":"application/json"}'
+          data-toast-success="咨询师已添加" data-refresh="1">
+          <div class="mb-2"><label class="form-label" style="font-size:13px;">姓名 *</label><input type="text" class="form-control form-control-sm" id="c_name" placeholder="请输入姓名" required></div>
+          <div class="mb-2"><label class="form-label" style="font-size:13px;">职称</label><input type="text" class="form-control form-control-sm" id="c_title" placeholder="如：高级心理咨询师"></div>
+          <div class="mb-2"><label class="form-label" style="font-size:13px;">擅长领域</label><textarea class="form-control form-control-sm" id="c_spec" rows="2" placeholder="如：情绪障碍、青少年心理"></textarea></div>
+          <div class="row mb-2">
+            <div class="col-6"><label class="form-label" style="font-size:13px;">电话</label><input type="text" class="form-control form-control-sm" id="c_phone"></div>
+            <div class="col-6"><label class="form-label" style="font-size:13px;">邮箱</label><input type="email" class="form-control form-control-sm" id="c_email"></div>
+          </div>
+          <button type="submit" class="btn btn-primary-bs btn-sm w-100"><i class="bi bi-plus-lg"></i> 添加咨询师</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="card-panel">
+      <div class="card-header"><h6 class="mb-0">咨询师列表 <span class="badge bg-secondary ms-2">{{ counselors|length }}</span></h6></div>
+      <div class="card-body p-0">
+        <table class="table table-hover align-middle mb-0" style="font-size:14px;">
+          <thead class="table-light"><tr><th>姓名</th><th>职称</th><th>擅长</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for c in counselors %}
+            <tr id="counselor-row-{{ c.id }}">
+              <td style="font-weight:600;">
+                <div class="d-flex align-items-center">
+                  <div class="rounded-circle me-2 d-flex align-items-center justify-content-center text-white" style="width:32px;height:32px;background:#88c0d0;font-size:13px;font-weight:600;">{{ c.name[0] }}</div>
+                  <div>{{ c.name }}<div style="font-size:11px;color:#7b88a1;">{{ c.email or c.phone or '-' }}</div></div>
+                </div>
+              </td>
+              <td>{{ c.title or '-' }}</td>
+              <td style="font-size:12px;color:#4c566a;">{{ c.specialty or '-' }}</td>
+              <td>{% if c.is_active %}<span class="badge badge-status-available">在职</span>{% else %}<span class="badge badge-status-maintenance">停用</span>{% endif %}</td>
+              <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="editCounselor({{ c.id }}, '{{ c.name }}', '{{ c.title or '' }}', '{{ c.specialty or '' }}', '{{ c.phone or '' }}', '{{ c.email or '' }}', {{ c.is_active }})"><i class="bi bi-pencil"></i></button>
+                <button class="btn btn-sm btn-outline-danger" onclick="if(confirmAction('确认删除咨询师 {{ c.name }}？')) { htmx.ajax('DELETE', '/api/counselors/{{ c.id }}', {}); toastMsg('已删除'); setTimeout(()=>window.location.reload(), 500); }"><i class="bi bi-trash"></i></button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editCounselorModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title">编辑咨询师</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <form id="editCForm" hx-put=""
+    hx-vals='js:{"name": document.getElementById("ec_name").value, "title": document.getElementById("ec_title").value, "specialty": document.getElementById("ec_spec").value, "phone": document.getElementById("ec_phone").value, "email": document.getElementById("ec_email").value, "is_active": document.getElementById("ec_active").checked?1:0}'
+    hx-headers='{"Content-Type":"application/json"}'
+    data-close-modal="1" data-refresh="1" data-toast-success="修改成功">
+    <div class="modal-body">
+      <div class="mb-2"><label class="form-label">姓名</label><input type="text" class="form-control" id="ec_name"></div>
+      <div class="mb-2"><label class="form-label">职称</label><input type="text" class="form-control" id="ec_title"></div>
+      <div class="mb-2"><label class="form-label">擅长领域</label><textarea class="form-control" id="ec_spec" rows="2"></textarea></div>
+      <div class="row mb-2">
+        <div class="col-6"><label class="form-label">电话</label><input type="text" class="form-control" id="ec_phone"></div>
+        <div class="col-6"><label class="form-label">邮箱</label><input type="email" class="form-control" id="ec_email"></div>
+      </div>
+      <div class="mb-2"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="ec_active"><label class="form-check-label" for="ec_active">在职状态</label></div></div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button type="submit" class="btn btn-primary-bs">保存</button></div>
+  </form>
+</div></div></div>
+
+<script>
+function editCounselor(id, name, title, spec, phone, email, active) {
+  document.getElementById('editCForm').setAttribute('hx-put', '/api/counselors/' + id);
+  document.getElementById('ec_name').value = name;
+  document.getElementById('ec_title').value = title;
+  document.getElementById('ec_spec').value = spec;
+  document.getElementById('ec_phone').value = phone;
+  document.getElementById('ec_email').value = email;
+  document.getElementById('ec_active').checked = active == 1;
+  new bootstrap.Modal(document.getElementById('editCounselorModal')).show();
+}
+</script>
+{% endblock %}

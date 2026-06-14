@@ -1,0 +1,163 @@
+{% extends "_base_app.html" %}
+{% block title %}失约与人工干预{% endblock %}
+{% block page_title %}<i class="bi bi-exclamation-triangle me-1"></i>失约管理与人工干预{% endblock %}
+{% block content %}
+<div class="row mb-4 g-3">
+  <div class="col-md-4"><div class="stat-card"><div class="stat-icon" style="background:#faf5ff;color:#b48ead;"><i class="bi bi-hourglass-split"></i></div><div class="stat-value">{{ cooldown_users|length }}</div><div class="stat-label">当前冷静期人数</div></div></div>
+  <div class="col-md-4"><div class="stat-card"><div class="stat-icon" style="background:#fef2f2;color:#bf616a;"><i class="bi bi-telephone-x"></i></div><div class="stat-value">{{ pending_appts|length }}</div><div class="stat-label">待干预失约</div></div></div>
+  <div class="col-md-4"><div class="stat-card"><div class="stat-icon" style="background:#ecfdf5;color:#a3be8c;"><i class="bi bi-journal-text"></i></div><div class="stat-value">{{ records|length }}</div><div class="stat-label">干预记录（近100条）</div></div></div>
+</div>
+
+<ul class="nav nav-tabs mb-3" id="interventionTabs">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabCooldown">冷静期列表</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabPending">待干预失约 ({{ pending_appts|length }})</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabRecords">干预记录</button></li>
+</ul>
+
+<div class="tab-content">
+  <div class="tab-pane fade show active" id="tabCooldown">
+    <div class="card-panel">
+      <div class="card-header"><h6 class="mb-0">冷静期中的用户</h6>
+        {% if not can_intervene %}<small class="text-danger"><i class="bi bi-lock me-1"></i>您无权限解除冷静期（需干预专员或管理员）</small>{% endif %}
+      </div>
+      <div class="card-body p-0">
+        {% if cooldown_users %}
+        <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+          <thead class="table-light"><tr><th>匿名识别码</th><th>累计失约</th><th>冷静期至</th><th>原因</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for u in cooldown_users %}
+            <tr id="cd-row-{{ u.id }}">
+              <td><code style="color:#b48ead;font-weight:600;">{{ u.anonymous_code }}</code></td>
+              <td><span class="badge badge-noshow">{{ u.no_show_count }} 次</span></td>
+              <td><div style="font-weight:600;color:#d08770;">{{ u.cooldown_until }}</div><div style="font-size:11px;color:#7b88a1;">{{ u.cooldown_reason or '-' }}</div></td>
+              <td style="font-size:12px;color:#7b88a1;">{{ u.cooldown_reason or '系统自动触发' }}</td>
+              <td>
+                {% if can_intervene %}
+                <button class="btn btn-sm btn-success" onclick="liftCooldown({{ u.id }}, '{{ u.anonymous_code }}')"><i class="bi bi-unlock"></i> 解除冷静期</button>
+                {% else %}
+                <span class="text-secondary" style="font-size:12px;"><i class="bi bi-lock"></i> 无权限</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-5 text-secondary"><i class="bi bi-check2-all" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">暂无处于冷静期的用户</div></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="tabPending">
+    <div class="card-panel">
+      <div class="card-header"><h6 class="mb-0">待处理的失约记录</h6></div>
+      <div class="card-body p-0">
+        {% if pending_appts %}
+        <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+          <thead class="table-light"><tr><th>预约编号</th><th>日期时段</th><th>咨询师</th><th>匿名码</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for a in pending_appts %}
+            <tr id="pa-row-{{ a.id }}">
+              <td><code style="font-size:11px;">{{ a.appointment_no }}</code></td>
+              <td><div style="font-weight:600;">{{ a.appointment_date }}</div><div style="font-size:12px;color:#7b88a1;">{{ a.start_time }} - {{ a.end_time }}</div></td>
+              <td>{{ a.counselor_name }}</td>
+              <td><code>{{ a.anonymous_code }}</code></td>
+              <td><button class="btn btn-sm btn-primary-bs" onclick="addRemark({{ a.id }}, '{{ a.anonymous_code }}')"><i class="bi bi-chat-dots"></i> 处理干预</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-5 text-secondary"><i class="bi bi-clipboard-check" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">所有失约已处理完毕 🎉</div></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="tabRecords">
+    <div class="card-panel">
+      <div class="card-header"><h6 class="mb-0">干预与操作记录</h6></div>
+      <div class="card-body p-0" style="max-height:600px;overflow-y:auto;">
+        {% if records %}
+        <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+          <thead class="table-light sticky-top"><tr><th>时间</th><th>操作人</th><th>类型</th><th>匿名码/预约号</th><th>备注</th></tr></thead>
+          <tbody>
+            {% for r in records %}
+            <tr>
+              <td style="font-size:12px;color:#7b88a1;">{{ r.created_at }}</td>
+              <td style="font-weight:600;">{{ r.operator_name or '-' }}</td>
+              <td>
+                {% if r.action_type=='mark_no_show' %}<span class="badge badge-noshow">标记失约</span>
+                {% elif r.action_type=='lift_cooldown' %}<span class="badge bg-success">解除冷静期</span>
+                {% elif r.action_type=='cancel' %}<span class="badge badge-cancelled">取消预约</span>
+                {% elif r.action_type=='remark' %}<span class="badge bg-info">干预备注</span>
+                {% else %}<span class="badge bg-secondary">{{ r.action_type }}</span>{% endif %}
+              </td>
+              <td>{% if r.anonymous_code %}<code>{{ r.anonymous_code }}</code>{% elif r.appointment_no %}<code style="font-size:11px;">{{ r.appointment_no }}</code>{% else %}-{% endif %}</td>
+              <td style="font-size:12px;color:#4c566a;">{{ r.remark or '-' }}{% if r.new_status %}<div style="font-size:11px;color:#7b88a1;"><i class="bi bi-arrow-right me-1"></i>{{ r.new_status }}</div>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-5 text-secondary">暂无记录</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="liftModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title"><i class="bi bi-unlock text-success me-1"></i>解除冷静期</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="alert alert-info" style="font-size:13px;"><i class="bi bi-person me-1"></i>匿名识别码：<code id="lift_code"></code></div>
+    <div class="mb-3"><label class="form-label">解除原因 *</label><textarea class="form-control" id="lift_remark" rows="3" placeholder="请填写解除冷静期的具体原因（如：已联系沟通、学生主动认错、特殊情况等），该记录将记入日志" required></textarea></div>
+    <input type="hidden" id="lift_au_id">
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+    <button type="button" class="btn btn-success" hx-post="/api/cooldown/lift" hx-vals='js:{"anonymous_user_id": parseInt(document.getElementById("lift_au_id").value), "remark": document.getElementById("lift_remark").value}' hx-headers='{"Content-Type":"application/json"}' data-close-modal="1" data-refresh="1" data-toast-success="冷静期已解除">确认解除</button>
+  </div>
+</div></div></div>
+
+<div class="modal fade" id="remarkModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title"><i class="bi bi-chat-dots text-primary me-1"></i>失约干预处理</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="mb-3 row g-2">
+      <div class="col-6"><div class="alert alert-secondary mb-0" style="font-size:12px;padding:8px 12px;"><b>预约号：</b><code id="rm_apt"></code></div></div>
+      <div class="col-6"><div class="alert alert-secondary mb-0" style="font-size:12px;padding:8px 12px;"><b>匿名码：</b><code id="rm_code"></code></div></div>
+    </div>
+    <div class="mb-3"><label class="form-label">干预结果</label>
+      <select class="form-select" id="rm_status">
+        <option value="contacted">已联系本人</option>
+        <option value="resolved">已解决问题</option>
+        <option value="pending">持续跟进中</option>
+        <option value="escalated">已转介上级</option>
+      </select>
+    </div>
+    <div class="mb-3"><label class="form-label">干预备注 *</label><textarea class="form-control" id="rm_remark" rows="4" placeholder="记录：联系情况、沟通结果、学生反馈、后续安排等"></textarea></div>
+    <input type="hidden" id="rm_apt_id">
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+    <button type="button" class="btn btn-primary-bs" hx-post="/api/intervention/remark" hx-vals='js:{"appointment_id": parseInt(document.getElementById("rm_apt_id").value), "status": document.getElementById("rm_status").value, "remark": document.getElementById("rm_remark").value}' hx-headers='{"Content-Type":"application/json"}' data-close-modal="1" data-refresh="1" data-toast-success="干预记录已保存">保存记录</button>
+  </div>
+</div></div></div>
+
+<script>
+function liftCooldown(id, code) {
+  document.getElementById('lift_au_id').value = id;
+  document.getElementById('lift_code').textContent = code;
+  document.getElementById('lift_remark').value = '';
+  new bootstrap.Modal(document.getElementById('liftModal')).show();
+}
+function addRemark(aptId, code) {
+  document.getElementById('rm_apt_id').value = aptId;
+  document.getElementById('rm_apt').textContent = aptId;
+  document.getElementById('rm_code').textContent = code;
+  document.getElementById('rm_remark').value = '';
+  new bootstrap.Modal(document.getElementById('remarkModal')).show();
+}
+</script>
+{% endblock %}

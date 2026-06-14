@@ -1,0 +1,155 @@
+{% extends "_base_app.html" %}
+{% block title %}周度使用分析{% endblock %}
+{% block page_title %}<i class="bi bi-bar-chart-line me-1"></i>周度使用分析 · {{ week_start }} ~ {{ week_end }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="d-flex gap-2">
+    <button class="week-nav-btn" onclick="location.href='/analytics?week={{ week_offset - 1 }}'"><i class="bi bi-chevron-left"></i> 上周</button>
+    <button class="week-nav-btn" onclick="location.href='/analytics?week=0'">本周</button>
+    <button class="week-nav-btn" onclick="location.href='/analytics?week={{ week_offset + 1 }}'">下周 <i class="bi bi-chevron-right"></i></button>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <span class="legend-dot" style="background:#5e81ac;"></span><small class="text-secondary">预约总量</small>
+    <span class="legend-dot ms-2" style="background:#a3be8c;"></span><small class="text-secondary">已签到</small>
+    <span class="legend-dot ms-2" style="background:#bf616a;"></span><small class="text-secondary">失约</small>
+  </div>
+</div>
+
+<div class="row mb-4 g-3">
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#eef2ff;color:#5e81ac;"><i class="bi bi-calendar-check"></i></div><div class="stat-value">{{ grand_total }}</div><div class="stat-label">预约总量</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#ecfdf5;color:#a3be8c;"><i class="bi bi-check2-all"></i></div><div class="stat-value">{{ overall_attend_rate }}<small style="font-size:16px;">%</small></div><div class="stat-label">整体到场率（{{ grand_checked }}/{{ grand_total }}）</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#fef2f2;color:#bf616a;"><i class="bi bi-graph-down"></i></div><div class="stat-value">{{ overall_noshow_rate }}<small style="font-size:16px;">%</small></div><div class="stat-label">失约率（{{ grand_noshow }}/{{ grand_total }}）</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#faf5ff;color:#b48ead;"><i class="bi bi-hourglass-split"></i></div><div class="stat-value">{{ current_cooldown }}</div><div class="stat-label">当前冷静期人数</div></div></div>
+</div>
+
+<div class="card-panel mb-4">
+  <div class="card-header"><h6 class="mb-0"><i class="bi bi-bar-chart me-1"></i>每日预约与失约分布</h6></div>
+  <div class="card-body">
+    <div class="chart-container">
+      <div class="chart-bar-group">
+        {% for s in daily_stats %}
+        <div class="d-flex flex-column align-items-center" style="flex:1;position:relative;height:200px;">
+          <div class="d-flex align-items-end gap-1" style="height:100%;width:100%;justify-content:center;">
+            <div style="width:18px;position:relative;">
+              <div class="chart-bar" style="width:100%;height:{{ s.bar_pct if s.total>0 else 2 }}%;background:linear-gradient(180deg,#88c0d0,#5e81ac);" title="预约 {{ s.total }}">
+                {% if s.total>0 %}<span class="bar-value">{{ s.total }}</span>{% endif %}
+              </div>
+            </div>
+            <div style="width:18px;position:relative;">
+              <div class="chart-bar" style="width:100%;height:{{ (s.checked / grand_total * 100 * 2.5)|round(1) if s.checked>0 and grand_total>0 else 2 }}%;background:linear-gradient(180deg,#a3be8c,#8fbc8f);" title="签到 {{ s.checked }}"></div>
+            </div>
+            <div style="width:18px;position:relative;">
+              <div class="chart-bar" style="width:100%;height:{{ (s.noshow / grand_total * 100 * 2.5)|round(1) if s.noshow>0 and grand_total>0 else 2 }}%;background:linear-gradient(180deg,#e8a0a0,#bf616a);" title="失约 {{ s.noshow }}"></div>
+            </div>
+          </div>
+          <span class="bar-label">{{ s.label }}<div style="font-size:10px;margin-top:2px;">{{ s.short }}</div></span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="table-responsive mt-4">
+    <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+      <thead class="table-light"><tr><th>日期</th><th>预约数</th><th>已签到</th><th>失约</th><th>取消</th><th>失约率</th><th>到场率</th><th>独立用户</th></tr></thead>
+      <tbody>
+        {% for s in daily_stats %}
+        <tr>
+          <td style="font-weight:600;">{{ s.label }} <small class="text-secondary">{{ s.short }}</small></td>
+          <td><b>{{ s.total }}</b></td>
+          <td class="load-low">{{ s.checked }}</td>
+          <td class="load-high">{{ s.noshow }}</td>
+          <td>{{ s.cancelled }}</td>
+          <td><span class="badge {% if s.noshow_rate>=30 %}badge-noshow{% elif s.noshow_rate>=15 %}bg-warning text-dark{% else %}bg-light text-dark{% endif %}">{{ s.noshow_rate }}%</span></td>
+          <td><span class="badge {% if s.attend_rate>=80 %}badge-checked{% elif s.attend_rate>=60 %}bg-info{% else %}bg-warning text-dark{% endif %}">{{ s.attend_rate }}%</span></td>
+          <td>{{ s.unique_users }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card-panel h-100">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-people me-1"></i>咨询师时段负载</h6></div>
+      <div class="card-body">
+        {% if counselor_load %}
+        {% for c in counselor_load %}
+        <div class="mb-3 p-3 rounded" style="background:#f8fafc;">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div style="font-weight:600;">{{ c.name }} <small class="text-secondary">{{ c.title or '' }}</small></div>
+            <div>
+              <span class="badge {% if c.load_level=='high' %}badge-noshow{% elif c.load_level=='medium' %}bg-warning text-dark{% else %}badge-checked{% endif %} load-{{ c.load_level }}">{{ c.load_rate }}%</span>
+            </div>
+          </div>
+          <div class="cooldown-bar progress-sm mb-2"><div style="width:{{ c.load_rate }}%;background:{% if c.load_level=='high' %}#bf616a{% elif c.load_level=='medium' %}#ebcb8b{% else %}#a3be8c{% endif %};"></div></div>
+          <div class="d-flex justify-content-between" style="font-size:12px;color:#7b88a1;">
+            <span>排时段数：{{ c.scheduled_slots }}</span>
+            <span>已预约：{{ c.booked_appts }}</span>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center py-4 text-secondary">本周暂无排班数据</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card-panel h-100">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-hourglass-split me-1"></i>近7天冷静期人数变化</h6></div>
+      <div class="card-body">
+        <div class="chart-container" style="padding-bottom:50px;">
+          <div class="chart-bar-group">
+            {% for c in cooldown_history %}
+            <div class="d-flex flex-column align-items-center" style="flex:1;position:relative;height:200px;">
+              <div class="chart-bar" style="width:60%;height:{{ c.bar_pct if c.active>0 else 2 }}%;background:linear-gradient(180deg,#d4a5c9,#b48ead);">
+                {% if c.active>0 %}<span class="bar-value">{{ c.active }}</span>{% endif %}
+                <span class="bar-label">{{ c.date }}</span>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="table-responsive mt-3">
+        <table class="table table-sm align-middle mb-0" style="font-size:12px;">
+          <thead class="table-light"><tr><th>日期</th><th>冷静期中</th><th>新增冷静期</th><th>解除冷静期</th></tr></thead>
+          <tbody>
+            {% for c in cooldown_history %}
+            <tr>
+              <td>{{ c.date }}</td>
+              <td style="font-weight:600;color:#b48ead;">{{ c.active }}</td>
+              <td class="load-high">+{{ c.new_cooldown }}</td>
+              <td class="load-low">-{{ c.lifted }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card-panel">
+  <div class="card-header"><h6 class="mb-0"><i class="bi bi-door-open me-1"></i>咨询室使用情况</h6></div>
+  <div class="card-body">
+    <div class="row g-3">
+      {% set max_usage = room_usage[0].usage_count if room_usage and room_usage[0].usage_count > 0 else 1 %}
+      {% for r in room_usage %}
+      <div class="col-md-4">
+        <div class="p-3 rounded" style="background:#f8fafc;border:1px solid #e5e9f0;">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div><b>{{ r.room_number }}</b> <small class="text-secondary">{{ r.room_type }}</small></div>
+            <div style="font-size:22px;font-weight:700;color:#5e81ac;">{{ r.usage_count }}</div>
+          </div>
+          <div class="cooldown-bar progress-sm"><div style="width:{{ (r.usage_count / max_usage * 100)|round(1) }}%;background:#5e81ac;"></div></div>
+          <div style="font-size:11px;color:#7b88a1;margin-top:6px;">使用率 {{ (r.usage_count / max_usage * 100)|round(1) }}%</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

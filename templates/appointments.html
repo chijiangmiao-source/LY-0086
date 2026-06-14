@@ -1,0 +1,112 @@
+{% extends "_base_app.html" %}
+{% block title %}预约与签到管理{% endblock %}
+{% block page_title %}<i class="bi bi-calendar-check me-1"></i>预约与签到管理{% endblock %}
+{% block content %}
+<div class="card-panel mb-4">
+  <div class="card-body">
+    <form class="row g-3 align-items-end" method="get" action="/appointments">
+      <div class="col-md-3"><label class="form-label" style="font-size:13px;">预约日期</label><input type="date" class="form-control" name="date" value="{{ filter_date }}"></div>
+      <div class="col-md-3"><label class="form-label" style="font-size:13px;">状态筛选</label>
+        <select class="form-select" name="status">
+          {% set opt = [('all','全部'),('pending','待签到'),('checked','已签到'),('noshow','已失约'),('cancelled','已取消')] %}
+          {% for v,l in opt %}<option value="{{ v }}" {% if status==v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4"><label class="form-label" style="font-size:13px;">搜索</label><input type="text" class="form-control" name="q" value="{{ q }}" placeholder="匿名码 / 预约号 / 咨询师"></div>
+      <div class="col-md-2"><button type="submit" class="btn btn-primary-bs w-100"><i class="bi bi-search"></i> 查询</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="card-panel">
+  <div class="card-header">
+    <h6 class="mb-0">预约记录 <span class="badge bg-secondary ms-2">{{ appointments|length }} 条</span></h6>
+    <small class="text-secondary"><i class="bi bi-info-circle me-1"></i>签到窗口：开始前{{ before_minutes }}分钟 ～ 开始后{{ after_minutes }}分钟</small>
+  </div>
+  <div class="card-body p-0">
+    {% if appointments %}
+    <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+      <thead class="table-light"><tr>
+        <th>预约编号</th><th>日期时段</th><th>咨询师</th><th>房间</th><th>匿名识别码</th><th>签到状态</th><th>干预状态</th><th>操作</th>
+      </tr></thead>
+      <tbody>
+        {% for a in appointments %}
+        <tr id="apt-row-{{ a.id }}">
+          <td><code style="font-size:11px;">{{ a.appointment_no }}</code></td>
+          <td><div style="font-weight:600;">{{ a.appointment_date }}</div><div style="font-size:12px;color:#7b88a1;">{{ a.start_time }} - {{ a.end_time }}</div></td>
+          <td>{{ a.counselor_name }}</td>
+          <td><span class="badge bg-light text-dark" style="font-size:11px;">{{ a.room_number }}</span> <small>{{ a.room_type }}</small></td>
+          <td><code style="color:#5e81ac;">{{ a.anonymous_code }}</code></td>
+          <td>
+            {% if a.checkin_status=='checked_in' %}<span class="badge badge-checked"><i class="bi bi-check-circle me-1"></i>已签到</span><div style="font-size:11px;color:#7b88a1;">{{ a.checkin_time }}</div>
+            {% elif a.no_show_marked==1 %}<span class="badge badge-noshow"><i class="bi bi-x-circle me-1"></i>失约</span>
+            {% elif a.checkin_status=='cancelled' %}<span class="badge badge-cancelled"><i class="bi bi-slash-circle me-1"></i>已取消</span>
+            {% else %}<span class="badge badge-pending"><i class="bi bi-clock me-1"></i>待签到</span>{% endif %}
+          </td>
+          <td>
+            {% if a.intervention_status=='pending' %}<span class="badge badge-cooldown">待干预</span>
+            {% elif a.intervention_status=='contacted' %}<span class="badge bg-info">已联系</span>
+            {% elif a.intervention_status=='resolved' %}<span class="badge bg-success">已处理</span>
+            {% else %}<span class="text-secondary">-</span>{% endif %}
+          </td>
+          <td>
+            {% if a.can_checkin %}
+            <button class="btn btn-sm btn-success me-1" hx-post="/api/checkin" hx-vals='{"appointment_id": {{ a.id }}}' hx-headers='{"Content-Type":"application/json"}' data-refresh="1" data-toast-success="签到成功"><i class="bi bi-person-check"></i> 签到</button>
+            {% endif %}
+            {% if a.can_mark_noshow %}
+            <button class="btn btn-sm btn-danger me-1" onclick="markNoShow({{ a.id }}, '{{ a.anonymous_code }}')"><i class="bi bi-x-circle"></i> 标记失约</button>
+            {% endif %}
+            {% if a.checkin_status!='checked_in' and a.checkin_status!='cancelled' %}
+            <button class="btn btn-sm btn-outline-secondary me-1" onclick="cancelApt({{ a.id }})"><i class="bi bi-slash-circle"></i></button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-secondary"><i class="bi bi-calendar-x" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">暂无符合条件的预约记录</div></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="modal fade" id="noshowModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title"><i class="bi bi-exclamation-triangle text-warning me-1"></i>标记失约确认</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="alert alert-warning mb-3" style="font-size:13px;"><i class="bi bi-info-circle me-1"></i>已签到记录不能改判为失约。累计失约3次将自动进入冷静期。</div>
+    <div class="mb-3"><label class="form-label">失约原因备注（可选）</label><textarea class="form-control" id="noshow_remark" rows="3" placeholder="如：联系不上、临时有事等"></textarea></div>
+    <input type="hidden" id="noshow_apt_id">
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+    <button type="button" class="btn btn-danger" hx-post="/api/noshow" hx-vals='js:{"appointment_id": parseInt(document.getElementById("noshow_apt_id").value), "remark": document.getElementById("noshow_remark").value}' hx-headers='{"Content-Type":"application/json"}' data-close-modal="1" data-refresh="1" data-toast-success="已标记为失约">确认失约</button>
+  </div>
+</div></div></div>
+
+<div class="modal fade" id="cancelModal" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title">取消预约</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="mb-3"><label class="form-label">取消原因</label><textarea class="form-control" id="cancel_reason" rows="2" placeholder="用户主动取消等"></textarea></div>
+    <input type="hidden" id="cancel_apt_id">
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">放弃</button>
+    <button type="button" class="btn btn-outline-danger" hx-post="/api/cancel" hx-vals='js:{"appointment_id": parseInt(document.getElementById("cancel_apt_id").value), "reason": document.getElementById("cancel_reason").value}' hx-headers='{"Content-Type":"application/json"}' data-close-modal="1" data-refresh="1" data-toast-success="预约已取消">确认取消</button>
+  </div>
+</div></div></div>
+
+<script>
+function markNoShow(id, code) {
+  document.getElementById('noshow_apt_id').value = id;
+  document.getElementById('noshow_remark').value = '';
+  new bootstrap.Modal(document.getElementById('noshowModal')).show();
+}
+function cancelApt(id) {
+  document.getElementById('cancel_apt_id').value = id;
+  document.getElementById('cancel_reason').value = '';
+  new bootstrap.Modal(document.getElementById('cancelModal')).show();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>匿名预约 - 校园心理咨询中心</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%); min-height: 100vh; }
+.header-banner { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 30px 0; }
+.step-badge { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
+.slot-card { border: 2px solid #e5e9f0; border-radius: 12px; padding: 16px; cursor: pointer; transition: all .2s; background: #fff; }
+.slot-card:hover { border-color: #667eea; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102,126,234,0.15); }
+.slot-card.selected { border-color: #667eea; background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); }
+.slot-card.full { opacity: 0.5; cursor: not-allowed; background: #f8fafc; }
+.privacy-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.privacy-high { background: #fef2f2; color: #991b1b; }
+.privacy-normal { background: #ecfeff; color: #155e75; }
+.anony-input { padding: 14px; font-size: 16px; letter-spacing: 1px; font-weight: 600; }
+.timeline-dot { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<script>
+htmx.config.useTemplateFragments = true;
+var selectedSchedule = null;
+function toastMsg(msg, type) {
+  type = type || 'success';
+  var colors = { success: 'bg-success text-white', error: 'bg-danger text-white', warning: 'bg-warning text-dark' };
+  var icons = { success: 'bi-check-circle-fill', error: 'bi-exclamation-triangle-fill', warning: 'bi-exclamation-circle-fill' };
+  var id = 't_' + Date.now();
+  document.getElementById('toast_container').insertAdjacentHTML('beforeend', '<div class="toast align-items-center '+colors[type]+' border-0" id="'+id+'"><div class="d-flex"><div class="toast-body"><i class="bi '+icons[type]+' me-2"></i>'+msg+'</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>');
+  new bootstrap.Toast(document.getElementById(id), { delay: 3500 }).show();
+}
+function selectSlot(sid, card) {
+  if (card.classList.contains('full')) { toastMsg('该时段已满员', 'warning'); return; }
+  document.querySelectorAll('.slot-card').forEach(function(el){ el.classList.remove('selected'); });
+  card.classList.add('selected');
+  selectedSchedule = sid;
+  document.getElementById('selected_slot_info').style.display = 'block';
+  document.getElementById('btn_submit').disabled = false;
+  document.getElementById('selected_sid').value = sid;
+  htmx.ajax('POST', '/api/anonymous/book/check', {
+    values: { anonymous_code: document.getElementById('anon_code').value, schedule_id: sid, target_date: document.getElementById('target_date').value },
+    target: '#check_result', swap: 'innerHTML', headers: {'Content-Type':'application/json'}
+  }).then(function(r){ try { var d = JSON.parse(r.xhr.responseText); if (d.ok) { document.getElementById('confirm_info').innerHTML = '<div class="alert alert-success mb-0" style="font-size:13px;"><i class="bi bi-check-circle me-1"></i>校验通过：<b>'+d.schedule.counselor_name+'</b> · '+d.schedule.date+' '+d.schedule.start_time+'-'+d.schedule.end_time+' · 房间 <b>'+d.schedule.room_number+'</b></div>'; document.getElementById('confirm_section').style.display='block'; } } catch(e) {} });
+}
+document.addEventListener('htmx:responseError', function(evt){ try { var d = JSON.parse(evt.detail.xhr.responseText); if (d && d.error) toastMsg(d.error, 'error'); document.getElementById('confirm_section').style.display='none'; document.getElementById('btn_submit').disabled = true; } catch(e) {} });
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById('book_form').addEventListener('submit', function(e){
+    e.preventDefault();
+    if (!selectedSchedule) { toastMsg('请先选择一个时段', 'warning'); return false; }
+    return true;
+  });
+});
+</script>
+</head>
+<body>
+<div id="toast_container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index:9999;"></div>
+
+<div class="header-banner">
+  <div class="container">
+    <div class="d-flex align-items-center">
+      <div class="me-3" style="width:60px;height:60px;border-radius:18px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:30px;"><i class="bi bi-heart-pulse"></i></div>
+      <div>
+        <h2 class="mb-0" style="font-weight:700;">校园心理咨询中心</h2>
+        <div style="opacity:0.9;">Anonymous Appointment Booking · 匿名预约服务</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container py-4">
+  <div class="card border-0 shadow-sm mb-4" style="border-radius:14px;overflow:hidden;">
+    <div class="card-body p-4">
+      <div class="row align-items-center">
+        <div class="col-md-5">
+          <h5 class="mb-1"><i class="bi bi-calendar3 text-primary me-1"></i>选择预约日期</h5>
+          <form class="mt-2" method="get" action="/anonymous/book">
+            <div class="d-flex gap-2">
+              <input type="date" class="form-control" name="date" id="target_date" value="{{ target_date }}" onchange="this.form.submit()">
+              <a href="/anonymous/book" class="btn btn-outline-secondary">今天</a>
+            </div>
+          </form>
+        </div>
+        <div class="col-md-7">
+          <div class="d-flex gap-3 align-items-start">
+            <div class="timeline-dot bg-light text-primary"><i class="bi bi-shield-lock"></i></div>
+            <div style="font-size:13px;line-height:1.7;color:#4c566a;">
+              <b class="text-primary">隐私保护说明：</b>本系统采用<b>匿名识别码</b>机制，您无需提供任何个人身份信息。请自行牢记您的识别码（长度4-32位，字母/数字/下划线/减号）。
+              连续失约 {{ threshold }} 次将自动进入 {{ cooldown_days }} 天冷静期，期间无法继续预约。
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <form id="book_form" hx-post="/api/anonymous/book/submit"
+    hx-vals='js:{"anonymous_code": document.getElementById("anon_code").value.trim(), "schedule_id": parseInt(document.getElementById("selected_sid").value || "0"), "target_date": document.getElementById("target_date").value}'
+    hx-headers='{"Content-Type":"application/json"}'
+    hx-target="#result_area" hx-swap="innerHTML">
+
+  <div class="row g-4">
+    <div class="col-md-8">
+      <div class="card border-0 shadow-sm h-100" style="border-radius:14px;">
+        <div class="card-header border-0 bg-white pb-0 pt-4 px-4">
+          <h5 class="mb-0"><i class="bi bi-clock-history text-success me-1"></i>可预约时段 <span class="badge bg-secondary ms-2">{{ schedules|length }}</span></h5>
+          <div style="font-size:12px;color:#7b88a1;margin-top:4px;"><i class="bi bi-info-circle me-1"></i>点击卡片选择时段，已约满的时段不可选</div>
+        </div>
+        <div class="card-body p-4">
+          <input type="hidden" id="selected_sid" value="">
+          {% if schedules %}
+          <div class="row g-3">
+            {% for s in schedules %}
+            <div class="col-lg-6">
+              <div class="slot-card {% if s.available <= 0 %}full{% endif %}" onclick="selectSlot({{ s.id }}, this)">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <div style="font-size:18px;font-weight:700;color:#2e3440;">{{ s.start_time }} - {{ s.end_time }}</div>
+                  <div>
+                    {% if s.available > 0 %}
+                    <span class="badge bg-success"><i class="bi bi-check2"></i> 余 {{ s.available }}</span>
+                    {% else %}
+                    <span class="badge bg-secondary"><i class="bi bi-x-lg"></i> 已满</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="mb-2" style="font-weight:600;color:#5e81ac;"><i class="bi bi-person-badge me-1"></i>{{ s.counselor_name }}</div>
+                <div style="font-size:12px;color:#7b88a1;" class="mb-2">{{ s.counselor_title or '心理咨询师' }} · 擅长：{{ s.counselor_specialty or '综合' }}</div>
+                <div class="d-flex gap-2 align-items-center" style="font-size:12px;">
+                  <span class="privacy-tag privacy-{{ s.privacy_level }}"><i class="bi bi-shield-lock me-1"></i>{{ {'high':'高隐私','normal':'标准'}[s.privacy_level] }}</span>
+                  <span class="text-secondary"><i class="bi bi-geo-alt me-1"></i>{{ s.room_number }} · {{ s.room_type }}</span>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="text-center py-5 text-secondary">
+            <i class="bi bi-calendar-x" style="font-size:64px;opacity:0.2;"></i>
+            <div class="mt-3" style="font-size:16px;">当日暂无可预约的排班</div>
+            <div style="font-size:13px;" class="mt-2">请尝试选择其他日期，或联系咨询中心安排</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm sticky-top" style="border-radius:14px;top:20px;">
+        <div class="card-header border-0 bg-white pt-4 pb-2 px-4">
+          <h5 class="mb-0"><i class="bi bi-box-arrow-in-right text-info me-1"></i>提交预约</h5>
+        </div>
+        <div class="card-body p-4">
+          <div class="mb-3">
+            <label class="form-label" style="font-weight:600;"><i class="bi bi-shield-lock me-1 text-primary"></i>匿名识别码 *</label>
+            <input type="text" class="form-control anony-input" id="anon_code" placeholder="如 student_001 或 A8K2M9" maxlength="32" pattern="^[A-Za-z0-9_-]{4,32}$" title="4-32位字母、数字、下划线或减号" required>
+            <div style="font-size:11px;color:#7b88a1;margin-top:6px;line-height:1.6;"><i class="bi bi-lightbulb me-1"></i>请输入您的个人匿名识别码（4-32位），用于签到和追踪您的失约次数。请<b>务必牢记</b>！</div>
+          </div>
+          <div id="selected_slot_info" style="display:none;">
+            <div class="mb-3 p-3 rounded" style="background:#f0f9ff;border:1px solid #bae6fd;">
+              <div style="font-size:12px;color:#0369a1;font-weight:600;"><i class="bi bi-check-circle me-1"></i>已选择时段</div>
+              <div id="check_result" class="mt-2" style="font-size:13px;color:#0c4a6e;">正在校验...</div>
+            </div>
+          </div>
+          <div id="confirm_section" style="display:none;" class="mb-3"></div>
+          <div id="result_area"></div>
+          <button type="submit" id="btn_submit" class="btn btn-lg w-100" disabled style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:0;font-weight:600;">
+            <i class="bi bi-send me-1"></i>确认提交预约
+          </button>
+          <div class="mt-3 p-3 rounded" style="background:#fffbeb;border:1px solid #fde68a;font-size:12px;color:#92400e;line-height:1.7;">
+            <b><i class="bi bi-exclamation-triangle me-1"></i>预约须知</b><br>
+            · 签到窗口：开始前15分钟～开始后30分钟<br>
+            · 超时未签到且未取消将记为失约<br>
+            · 同一时段只能有一个有效预约<br>
+            · 失约 {{ threshold }} 次触发 {{ cooldown_days }} 天冷静期
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </form>
+
+  <div class="text-center py-5" style="font-size:12px;color:#7b88a1;">
+    <i class="bi bi-heart me-1"></i>如有紧急心理危机，请拨打24小时心理援助热线，或直接联系校医院 / 学工部
+  </div>
+</div>
+</body>
+</html>

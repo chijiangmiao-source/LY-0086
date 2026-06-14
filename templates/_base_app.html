@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}校园心理咨询室管理系统{% endblock %}</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+:root { --primary: #5e81ac; --primary-dark: #4c6d91; --accent: #bf616a; --success: #a3be8c; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f7fa; }
+.sidebar { min-height: 100vh; background: linear-gradient(180deg, #3b4252 0%, #2e3440 100%); color: #eceff4; }
+.sidebar .nav-link { color: #d8dee9; border-radius: 8px; margin: 2px 0; padding: 10px 16px; transition: all .2s; }
+.sidebar .nav-link:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.sidebar .nav-link.active { background: var(--primary); color: #fff; }
+.sidebar .nav-link i { width: 22px; display: inline-block; }
+.sidebar-brand { padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.sidebar-brand h5 { margin: 0; font-weight: 600; color: #fff; }
+.sidebar-brand small { color: #88c0d0; font-size: 12px; }
+.content-area { padding: 24px; }
+.topbar { background: #fff; border-bottom: 1px solid #e5e9f0; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; }
+.stat-card { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #e5e9f0; transition: transform .2s; }
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.06); }
+.stat-card .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.stat-card .stat-value { font-size: 28px; font-weight: 700; color: #2e3440; margin-top: 8px; }
+.stat-card .stat-label { color: #7b88a1; font-size: 13px; margin-top: 2px; }
+.card-panel { background: #fff; border-radius: 12px; border: 1px solid #e5e9f0; }
+.card-panel .card-header { background: #fff; border-bottom: 1px solid #e5e9f0; padding: 16px 20px; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center; }
+.card-panel .card-body { padding: 20px; }
+.badge-privacy-high { background: #bf616a; }
+.badge-privacy-normal { background: #88c0d0; }
+.badge-status-available { background: #a3be8c; }
+.badge-status-occupied { background: #d08770; }
+.badge-status-maintenance { background: #ebcb8b; color: #4c566a; }
+.btn-primary-bs { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn-primary-bs:hover { background: var(--primary-dark); border-color: var(--primary-dark); color: #fff; }
+.table-hover tbody tr:hover { background: #f8fafc; }
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator { display: inline-block; }
+.modal-backdrop { --bs-backdrop-opacity: 0.5; }
+.badge-checked { background: #a3be8c; }
+.badge-pending { background: #ebcb8b; color: #4c566a; }
+.badge-noshow { background: #bf616a; }
+.badge-cancelled { background: #9ca3af; }
+.badge-cooldown { background: #b48ead; }
+.cooldown-bar { background: #e5e9f0; border-radius: 6px; overflow: hidden; height: 10px; }
+.cooldown-bar > div { height: 100%; transition: width .3s; }
+.progress-sm { height: 6px; }
+.nav-tabs .nav-link { color: #4c566a; }
+.nav-tabs .nav-link.active { color: var(--primary); font-weight: 600; }
+.week-day-cell { min-height: 100px; border: 1px solid #e5e9f0; padding: 8px; border-radius: 8px; background: #fff; }
+.chart-bar-group { display: flex; align-items: flex-end; gap: 10px; height: 200px; }
+.chart-bar { flex: 1; background: linear-gradient(180deg, #88c0d0 0%, #5e81ac 100%); border-radius: 6px 6px 0 0; transition: opacity .2s; position: relative; min-height: 2px; }
+.chart-bar:hover { opacity: 0.85; }
+.chart-bar .bar-label { position: absolute; bottom: -24px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #7b88a1; white-space: nowrap; }
+.chart-bar .bar-value { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 600; color: #4c566a; }
+.chart-container { padding-top: 30px; padding-bottom: 40px; }
+.load-high { color: #bf616a; font-weight: 600; }
+.load-medium { color: #d08770; font-weight: 600; }
+.load-low { color: #a3be8c; font-weight: 600; }
+.role-admin { color: #bf616a; font-weight: 600; }
+.role-staff { color: #5e81ac; font-weight: 600; }
+.role-intervention { color: #b48ead; font-weight: 600; }
+.schedule-tag { background: #eceff4; padding: 4px 8px; border-radius: 6px; font-size: 12px; display: inline-block; margin: 2px; }
+.appointment-card { border: 1px solid #e5e9f0; border-radius: 10px; padding: 14px; margin-bottom: 10px; background: #fff; transition: all .2s; }
+.appointment-card:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(94,129,172,0.1); }
+.breadcrumb-link { color: #5e81ac; text-decoration: none; }
+.breadcrumb-link:hover { text-decoration: underline; }
+input[type="date"], input[type="time"] { border-radius: 8px; }
+.week-nav-btn { background: #fff; border: 1px solid #e5e9f0; color: #4c566a; border-radius: 8px; padding: 6px 14px; cursor: pointer; transition: all .2s; }
+.week-nav-btn:hover { background: #f0f4f8; border-color: var(--primary); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<script>
+htmx.config.useTemplateFragments = true;
+function toastMsg(msg, type) {
+  type = type || 'success';
+  var id = 'toast_' + Date.now() + Math.floor(Math.random()*1000);
+  var colors = { success: 'bg-success text-white', error: 'bg-danger text-white', warning: 'bg-warning text-dark', info: 'bg-info text-white' };
+  var icons = { success: 'bi-check-circle-fill', error: 'bi-exclamation-triangle-fill', warning: 'bi-exclamation-circle-fill', info: 'bi-info-circle-fill' };
+  var container = document.getElementById('toast-container');
+  container.insertAdjacentHTML('beforeend', '<div class="toast align-items-center '+colors[type]+' border-0" id="'+id+'" role="alert"><div class="d-flex"><div class="toast-body"><i class="bi '+icons[type]+' me-2"></i>'+msg+'</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>');
+  var t = new bootstrap.Toast(document.getElementById(id), { delay: 3500 });
+  t.show();
+}
+document.addEventListener('htmx:afterRequest', function(evt) {
+  var el = evt.detail.elt;
+  var xhr = evt.detail.xhr;
+  if (el.getAttribute && el.getAttribute('data-redirect')) {
+    if (xhr && xhr.status >= 200 && xhr.status < 300) {
+      try { var d = JSON.parse(xhr.responseText); if (d && d.success) window.location.href = el.getAttribute('data-redirect'); } catch(e) { window.location.href = el.getAttribute('data-redirect'); }
+    }
+  }
+  if (el.getAttribute && el.getAttribute('data-toast-success') && xhr && xhr.status >= 200 && xhr.status < 300) {
+    try { var d = JSON.parse(xhr.responseText); if (d && d.success) { toastMsg(el.getAttribute('data-toast-success') || '操作成功'); if (el.getAttribute('data-refresh')) setTimeout(function(){ window.location.reload(); }, 800); } } catch(e) {}
+  }
+  if (el.getAttribute && el.getAttribute('data-close-modal') && xhr && xhr.status >= 200 && xhr.status < 300) {
+    try { var d = JSON.parse(xhr.responseText); if (d && d.success) { var m = document.querySelector('.modal.show'); if (m) bootstrap.Modal.getInstance(m).hide(); if (el.getAttribute('data-refresh')) setTimeout(function(){ window.location.reload(); }, 500); } } catch(e) {}
+  }
+});
+document.addEventListener('htmx:responseError', function(evt) {
+  try { var d = JSON.parse(evt.detail.xhr.responseText); if (d && d.error) toastMsg(d.error, 'error'); else toastMsg('请求失败，请重试', 'error'); } catch(e) { toastMsg('请求失败，请重试', 'error'); }
+});
+document.addEventListener('htmx:afterSwap', function(evt) {});
+function confirmAction(msg) { return window.confirm(msg); }
+function openModal(title, bodyHtml, size) {
+  size = size || 'md';
+  var id = 'dyn_modal_' + Date.now();
+  document.body.insertAdjacentHTML('beforeend',
+    '<div class="modal fade" id="'+id+'" tabindex="-1"><div class="modal-dialog modal-'+size+'"><div class="modal-content">' +
+    '<div class="modal-header"><h5 class="modal-title">'+title+'</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
+    '<div class="modal-body">'+bodyHtml+'</div></div></div></div>');
+  var m = new bootstrap.Modal(document.getElementById(id));
+  m.show();
+  document.getElementById(id).addEventListener('hidden.bs.modal', function(e){ document.getElementById(id).remove(); });
+  return id;
+}
+</script>
+</head>
+<body>
+<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;"></div>
+<div class="container-fluid">
+<div class="row flex-nowrap">
+<div class="col-auto col-md-3 col-xl-2 px-sm-2 px-0 sidebar">
+  <div class="sidebar-brand">
+    <h5><i class="bi bi-heart-pulse me-2"></i>心理咨询中心</h5>
+    <small>Counseling Management</small>
+  </div>
+  <ul class="nav nav-pills flex-column mb-auto px-3 pt-3">
+    <li class="nav-item"><a href="/" class="nav-link {% if nav == 'dashboard' %}active{% endif %}"><i class="bi bi-speedometer2"></i> 工作台</a></li>
+    <li class="nav-item"><a href="/appointments" class="nav-link {% if nav == 'appointments' %}active{% endif %}"><i class="bi bi-calendar-check"></i> 预约与签到</a></li>
+    <li class="nav-item"><a href="/rooms" class="nav-link {% if nav == 'rooms' %}active{% endif %}"><i class="bi bi-door-open"></i> 咨询室管理</a></li>
+    <li class="nav-item"><a href="/counselors" class="nav-link {% if nav == 'counselors' %}active{% endif %}"><i class="bi bi-people"></i> 咨询师管理</a></li>
+    <li class="nav-item"><a href="/schedules" class="nav-link {% if nav == 'schedules' %}active{% endif %}"><i class="bi bi-calendar-week"></i> 排班管理</a></li>
+    <li class="nav-item"><a href="/interventions" class="nav-link {% if nav == 'interventions' %}active{% endif %}"><i class="bi bi-exclamation-triangle"></i> 失约与干预</a></li>
+    <li class="nav-item"><a href="/analytics" class="nav-link {% if nav == 'analytics' %}active{% endif %}"><i class="bi bi-bar-chart-line"></i> 周度分析</a></li>
+  </ul>
+  <div class="px-3 py-3 mt-3 border-top border-white border-opacity-10">
+    <a href="/anonymous/book" target="_blank" class="nav-link text-light" style="opacity:0.85;font-size:13px;"><i class="bi bi-box-arrow-up-right"></i> 匿名预约入口</a>
+  </div>
+</div>
+<div class="col py-0 px-0">
+  <div class="topbar">
+    <div><h5 class="mb-0 text-secondary" style="font-size:14px;">{% block page_title %}工作台{% endblock %}</h5></div>
+    <div class="d-flex align-items-center gap-3">
+      <div class="d-flex align-items-center">
+        <div class="me-2">
+          <div class="rounded-circle d-inline-flex align-items-center justify-content-center text-white" style="width:34px;height:34px;background:{{ {'admin':'#bf616a','staff':'#5e81ac','intervention':'#b48ead'}[user.role] }};">
+            <i class="bi bi-person"></i>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:600;color:#2e3440;">{{ user.real_name or user.username }}</div>
+          <small class="role-{{ user.role }}">{{ {'admin':'系统管理员','staff':'工作人员','intervention':'干预专员'}[user.role] }}</small>
+        </div>
+      </div>
+      <a href="/logout" class="btn btn-sm btn-outline-secondary" onclick="return confirmAction('确认退出登录？');"><i class="bi bi-box-arrow-right"></i> 退出</a>
+    </div>
+  </div>
+  <div class="content-area">
+    {% block content %}{% endblock %}
+  </div>
+  <div class="text-center py-4 text-secondary" style="font-size:12px;">© {{ year }} 校园心理咨询室预约保护与签到失约干预系统</div>
+</div>
+</div>
+</div>
+</body>
+</html>

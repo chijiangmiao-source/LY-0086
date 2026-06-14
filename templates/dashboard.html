@@ -1,0 +1,74 @@
+{% extends "_base_app.html" %}
+{% block title %}工作台 - 心理咨询室管理系统{% endblock %}
+{% block page_title %}<i class="bi bi-speedometer2 me-1"></i>工作台概览 · {{ today }}{% endblock %}
+{% block content %}
+<div class="row mb-4 g-3">
+  <div class="col-md-3"><div class="stat-card"><div class="d-flex justify-content-between align-items-start"><div class="stat-icon" style="background:#eef2ff;color:#5e81ac;"><i class="bi bi-calendar-plus"></i></div><small class="text-success"><i class="bi bi-arrow-up"></i></small></div><div class="stat-value">{{ today_appts }}</div><div class="stat-label">今日预约总量</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="d-flex justify-content-between align-items-start"><div class="stat-icon" style="background:#ecfdf5;color:#a3be8c;"><i class="bi bi-check-circle"></i></div></div><div class="stat-value">{{ today_checked }}</div><div class="stat-label">今日已签到</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="d-flex justify-content-between align-items-start"><div class="stat-icon" style="background:#fef2f2;color:#bf616a;"><i class="bi bi-x-circle"></i></div></div><div class="stat-value">{{ today_noshow }}</div><div class="stat-label">今日失约数</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="d-flex justify-content-between align-items-start"><div class="stat-icon" style="background:#faf5ff;color:#b48ead;"><i class="bi bi-hourglass-split"></i></div></div><div class="stat-value">{{ cooldown_count }}</div><div class="stat-label">冷静期中用户</div></div></div>
+</div>
+<div class="row mb-4 g-3">
+  <div class="col-md-4"><div class="stat-card" style="border-left:4px solid #5e81ac;"><div class="stat-label" style="color:#5e81ac;font-weight:600;"><i class="bi bi-door-open me-1"></i>咨询室总数</div><div class="d-flex align-items-baseline gap-2"><span class="stat-value" style="font-size:22px;">{{ total_rooms }}</span><small class="text-secondary">间</small></div></div></div>
+  <div class="col-md-4"><div class="stat-card" style="border-left:4px solid #a3be8c;"><div class="stat-label" style="color:#a3be8c;font-weight:600;"><i class="bi bi-people me-1"></i>在职咨询师</div><div class="d-flex align-items-baseline gap-2"><span class="stat-value" style="font-size:22px;">{{ active_counselors }}</span><small class="text-secondary">位</small></div></div></div>
+  <div class="col-md-4"><div class="stat-card" style="border-left:4px solid #ebcb8b;"><div class="stat-label" style="color:#d08770;font-weight:600;"><i class="bi bi-graph-up me-1"></i>今日到场率</div><div class="d-flex align-items-baseline gap-2"><span class="stat-value" style="font-size:22px;">{% if today_appts>0 %}{{ (today_checked/today_appts*100)|round(1) }}{% else %}0{% endif %}</span><small class="text-secondary">%</small></div></div></div>
+</div>
+<div class="row g-3">
+  <div class="col-md-8">
+    <div class="card-panel">
+      <div class="card-header"><div><h6 class="mb-0"><i class="bi bi-list-task me-1"></i>今日预约列表</h6></div>
+        <div class="d-flex gap-2">
+          <a href="/appointments" class="btn btn-sm btn-primary-bs"><i class="bi bi-arrow-right"></i> 查看全部</a>
+        </div></div>
+      <div class="card-body">
+        {% if today_list %}
+        <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" style="font-size:14px;">
+          <thead class="table-light"><tr><th>编号</th><th>时段</th><th>咨询师</th><th>房间</th><th>匿名码</th><th>状态</th></tr></thead>
+          <tbody>
+            {% for a in today_list %}
+            <tr>
+              <td><code style="font-size:11px;">{{ a.appointment_no[-8:] }}</code></td>
+              <td style="font-weight:600;">{{ a.start_time }} - {{ a.end_time }}</td>
+              <td>{{ a.counselor_name }}</td>
+              <td>{{ a.room_number }}</td>
+              <td><code>{{ a.anonymous_code }}</code></td>
+              <td>{% if a.checkin_status=='checked_in' %}<span class="badge badge-checked">已签到</span>
+                {% elif a.no_show_marked==1 %}<span class="badge badge-noshow">失约</span>
+                {% elif a.checkin_status=='cancelled' %}<span class="badge badge-cancelled">已取消</span>
+                {% else %}<span class="badge badge-pending">待签到</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-secondary"><i class="bi bi-calendar-x" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">今日暂无预约记录</div><a href="/schedules" class="btn btn-sm btn-outline-primary mt-3"><i class="bi bi-plus-circle"></i> 先去排班</a></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-panel mb-3">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-lightning me-1"></i>快速操作</h6></div>
+      <div class="card-body d-grid gap-2">
+        <a href="/appointments" class="btn btn-outline-primary-bs btn-sm text-start"><i class="bi bi-check2-square me-2"></i>管理签到与失约</a>
+        <a href="/schedules" class="btn btn-outline-success btn-sm text-start"><i class="bi bi-calendar3 me-2"></i>安排咨询师排班</a>
+        <a href="/anonymous/book" target="_blank" class="btn btn-outline-info btn-sm text-start"><i class="bi bi-box-arrow-up-right me-2"></i>打开匿名预约页面</a>
+        <a href="/interventions" class="btn btn-outline-warning btn-sm text-start"><i class="bi bi-chat-dots me-2"></i>处理干预与冷静期</a>
+        <a href="/analytics" class="btn btn-outline-secondary btn-sm text-start"><i class="bi bi-bar-chart me-2"></i>查看周度数据分析</a>
+      </div>
+    </div>
+    <div class="card-panel">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-info-circle me-1"></i>系统规则</h6></div>
+      <div class="card-body" style="font-size:13px;line-height:1.8;color:#4c566a;">
+        <div><i class="bi bi-shield-check text-success me-1"></i>签到窗口：开始前15分钟～开始后30分钟</div>
+        <div><i class="bi bi-x-circle text-danger me-1"></i>连续失约3次自动进入7天冷静期</div>
+        <div><i class="bi bi-lock text-warning me-1"></i>冷静期仅管理员/干预专员可解除</div>
+        <div><i class="bi bi-ban text-secondary me-1"></i>已签到记录不可改判为失约</div>
+        <div><i class="bi bi-person-badge text-info me-1"></i>同用户同时段只能有1个有效预约</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

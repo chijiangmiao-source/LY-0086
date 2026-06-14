@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}校园心理咨询室预约系统{% endblock %}</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+:root { --primary: #5e81ac; --primary-dark: #4c6d91; --accent: #bf616a; --success: #a3be8c; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f7fa; }
+.sidebar { min-height: 100vh; background: linear-gradient(180deg, #3b4252 0%, #2e3440 100%); color: #eceff4; }
+.sidebar .nav-link { color: #d8dee9; border-radius: 8px; margin: 2px 0; padding: 10px 16px; transition: all .2s; }
+.sidebar .nav-link:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.sidebar .nav-link.active { background: var(--primary); color: #fff; }
+.sidebar .nav-link i { width: 22px; display: inline-block; }
+.sidebar-brand { padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.sidebar-brand h5 { margin: 0; font-weight: 600; color: #fff; }
+.content-area { padding: 24px; }
+.topbar { background: #fff; border-bottom: 1px solid #e5e9f0; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; }
+.stat-card { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #e5e9f0; transition: transform .2s; }
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.06); }
+.stat-card .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.stat-card .stat-value { font-size: 28px; font-weight: 700; color: #2e3440; margin-top: 8px; }
+.stat-card .stat-label { color: #7b88a1; font-size: 13px; }
+.card-panel { background: #fff; border-radius: 12px; border: 1px solid #e5e9f0; }
+.card-panel .card-header { background: #fff; border-bottom: 1px solid #e5e9f0; padding: 16px 20px; border-radius: 12px 12px 0 0; }
+.card-panel .card-body { padding: 20px; }
+.badge-privacy-high { background: #bf616a; }
+.badge-privacy-normal { background: #88c0d0; }
+.badge-status-available { background: #a3be8c; }
+.badge-status-occupied { background: #d08770; }
+.badge-status-maintenance { background: #ebcb8b; color: #4c566a; }
+.btn-primary-bs { background: var(--primary); border-color: var(--primary); }
+.btn-primary-bs:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+.table-hover tbody tr:hover { background: #f8fafc; }
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator { display: inline-block; }
+.modal-backdrop { --bs-backdrop-opacity: 0.5; }
+.badge-checked { background: #a3be8c; }
+.badge-pending { background: #ebcb8b; color: #4c566a; }
+.badge-noshow { background: #bf616a; }
+.badge-cancelled { background: #9ca3af; }
+.badge-cooldown { background: #b48ead; }
+.cooldown-bar { background: #e5e9f0; border-radius: 6px; overflow: hidden; height: 10px; }
+.cooldown-bar > div { height: 100%; transition: width .3s; }
+.progress-sm { height: 6px; }
+.nav-tabs .nav-link { color: #4c566a; }
+.nav-tabs .nav-link.active { color: var(--primary); font-weight: 600; }
+.week-day-cell { min-height: 100px; border: 1px solid #e5e9f0; padding: 8px; border-radius: 8px; }
+.chart-bar-group { display: flex; align-items: flex-end; gap: 6px; height: 180px; }
+.chart-bar { flex: 1; background: linear-gradient(180deg, #88c0d0 0%, #5e81ac 100%); border-radius: 6px 6px 0 0; transition: opacity .2s; position: relative; }
+.chart-bar:hover { opacity: 0.85; }
+.chart-bar .bar-label { position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #7b88a1; white-space: nowrap; }
+.chart-bar .bar-value { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 600; color: #4c566a; }
+.chart-container { padding-top: 24px; padding-bottom: 32px; }
+.load-high { color: #bf616a; }
+.load-medium { color: #ebcb8b; }
+.load-low { color: #a3be8c; }
+.role-admin { color: #bf616a; }
+.role-staff { color: #5e81ac; }
+.role-intervention { color: #b48ead; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<script>
+htmx.config.useTemplateFragments = true;
+function toastMsg(msg, type='success') {
+  const id = 'toast_' + Date.now();
+  const colors = { success: 'bg-success', error: 'bg-danger', warning: 'bg-warning text-dark', info: 'bg-info' };
+  const icons = { success: 'bi-check-circle-fill', error: 'bi-exclamation-triangle-fill', warning: 'bi-exclamation-circle-fill', info: 'bi-info-circle-fill' };
+  const container = document.getElementById('toast-container');
+  container.insertAdjacentHTML('beforeend', `<div class="toast align-items-center text-white ${colors[type]} border-0" id="${id}" role="alert"><div class="d-flex"><div class="toast-body"><i class="bi ${icons[type]} me-2"></i>${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`);
+  const t = new bootstrap.Toast(document.getElementById(id), { delay: 3000 });
+  t.show();
+}
+document.addEventListener('htmx:afterRequest', function(evt) {
+  const el = evt.detail.elt;
+  if (el.hasAttribute('data-toast-success')) {
+    const xhr = evt.detail.xhr;
+    if (xhr && xhr.status >= 200 && xhr.status < 300) {
+      try { const d = JSON.parse(xhr.responseText); if (d && d.success) toastMsg(el.getAttribute('data-toast-success') || '操作成功'); } catch(e) {}
+    }
+  }
+});
+document.addEventListener('htmx:responseError', function(evt) {
+  try { const d = JSON.parse(evt.detail.xhr.responseText); if (d && d.error) toastMsg(d.error, 'error'); else toastMsg('请求失败', 'error'); } catch(e) { toastMsg('请求失败', 'error'); }
+});
+function confirmAction(msg) { return confirm(msg); }
+</script>
+</head>
+<body>
+<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;"></div>
+{% block body %}{% endblock %}
+</body>
+</html>

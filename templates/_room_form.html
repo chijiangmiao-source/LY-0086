@@ -1,0 +1,32 @@
+<div class="modal-header">
+  <h5 class="modal-title">{% if room %}编辑咨询室{% else %}新增咨询室{% endif %}</h5>
+  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+<form id="roomForm" {% if room %}hx-put="/api/rooms/{{ room.id }}"{% else %}hx-post="/api/rooms"{% endif %}
+  hx-vals='js:{"room_number": document.getElementById("f_rn").value, "room_type": document.getElementById("f_rt").value, "privacy_level": document.getElementById("f_pl").value, "status": document.getElementById("f_st").value, "description": document.getElementById("f_desc").value}'
+  hx-headers='{"Content-Type":"application/json"}'
+  data-close-modal="1" data-refresh="1" data-toast-success="{% if room %}修改成功{% else %}创建成功{% endif %}">
+  <div class="modal-body">
+    <div class="mb-3"><label class="form-label">房间编号 *</label><input type="text" class="form-control" id="f_rn" value="{{ room.room_number if room else '' }}" placeholder="如 R001" required></div>
+    <div class="mb-3"><label class="form-label">房间类型 *</label><select class="form-select" id="f_rt" required>
+      {% set opts = [('个体咨询室','个体咨询室'),('团体辅导室','团体辅导室'),('家庭咨询室','家庭咨询室'),('放松训练室','放松训练室'),('沙盘游戏室','沙盘游戏室'),('危机干预室','危机干预室')] %}
+      {% for v,l in opts %}<option value="{{ v }}" {% if room and room.room_type==v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select></div>
+    <div class="row mb-3">
+      <div class="col-6"><label class="form-label">隐私等级</label><select class="form-select" id="f_pl">
+        <option value="normal" {% if room and room.privacy_level=='normal' %}selected{% endif %}>标准</option>
+        <option value="high" {% if room and room.privacy_level=='high' %}selected{% endif %}>高隐私</option>
+      </select></div>
+      <div class="col-6"><label class="form-label">状态</label><select class="form-select" id="f_st">
+        <option value="available" {% if room and room.status=='available' %}selected{% endif %}>可用</option>
+        <option value="occupied" {% if room and room.status=='occupied' %}selected{% endif %}>使用中</option>
+        <option value="maintenance" {% if room and room.status=='maintenance' %}selected{% endif %}>维护中</option>
+      </select></div>
+    </div>
+    <div class="mb-3"><label class="form-label">说明</label><textarea class="form-control" id="f_desc" rows="2" placeholder="设备配置、容纳人数等">{{ room.description if room else '' }}</textarea></div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+    <button type="submit" class="btn btn-primary-bs"><i class="bi bi-check2"></i> {% if room %}保存修改{% else %}创建房间{% endif %}</button>
+  </div>
+</form>

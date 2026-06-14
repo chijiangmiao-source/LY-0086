@@ -1,0 +1,90 @@
+{% extends "_base_app.html" %}
+{% block title %}排班管理{% endblock %}
+{% block page_title %}<i class="bi bi-calendar-week me-1"></i>排班管理 · {{ week_dates[0] }} ~ {{ week_dates[6] }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="d-flex gap-2">
+    <button class="week-nav-btn" onclick="location.href='/schedules?week={{ week_offset - 1 }}'"><i class="bi bi-chevron-left"></i> 上一周</button>
+    <button class="week-nav-btn" onclick="location.href='/schedules?week=0'">本周</button>
+    <button class="week-nav-btn" onclick="location.href='/schedules?week={{ week_offset + 1 }}'">下一周 <i class="bi bi-chevron-right"></i></button>
+  </div>
+  <button class="btn btn-sm btn-primary-bs" data-bs-toggle="modal" data-bs-target="#addScheduleModal"><i class="bi bi-plus-lg"></i> 新增排班</button>
+</div>
+
+<div class="card-panel">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+      <thead class="table-light">
+        <tr>
+          <th style="min-width:160px;background:#f8fafc;position:sticky;left:0;z-index:1;">咨询师</th>
+          {% for i in range(7) %}
+          <th style="min-width:150px;">
+            <div style="font-weight:600;">{{ week_labels[i].split(' ')[1] }}</div>
+            <div style="font-size:11px;color:#7b88a1;font-weight:400;">{{ week_dates[i] }}</div>
+          </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in counselors %}
+        <tr>
+          <td style="background:#f8fafc;position:sticky;left:0;z-index:1;">
+            <div class="d-flex align-items-center">
+              <div class="rounded-circle me-2 d-flex align-items-center justify-content-center text-white" style="width:28px;height:28px;background:#88c0d0;font-size:12px;font-weight:600;">{{ c.name[0] }}</div>
+              <div>
+                <div style="font-weight:600;">{{ c.name }}</div>
+                <div style="font-size:11px;color:#7b88a1;">{{ c.title or '' }}</div>
+              </div>
+            </div>
+          </td>
+          {% for d in week_dates %}
+          <td>
+            {% set s_list = schedule_map.get((c.id, d), []) %}
+            {% for s in s_list %}
+            <div class="schedule-tag" style="background:#eef2ff;color:#4c6d91;">
+              <i class="bi bi-clock me-1"></i>{{ s.start_time }}-{{ s.end_time }}
+              <small class="text-secondary ms-1">{{ s.room_number }}</small>
+              <button class="btn-close ms-1" style="width:12px;height:12px;padding:0;opacity:0.5;"
+                onclick="if(confirmAction('确认删除此排班？')) { htmx.ajax('DELETE', '/api/schedules/{{ s.id }}', {}); toastMsg('已删除'); setTimeout(()=>window.location.reload(), 500); }"></button>
+            </div>
+            {% endfor %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="addScheduleModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title">新增排班</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <form id="addSForm" hx-post="/api/schedules"
+    hx-vals='js:{"counselor_id": document.getElementById("s_cou").value, "room_id": document.getElementById("s_room").value, "schedule_date": document.getElementById("s_date").value, "start_time": document.getElementById("s_st").value, "end_time": document.getElementById("s_et").value}'
+    hx-headers='{"Content-Type":"application/json"}'
+    data-close-modal="1" data-refresh="1" data-toast-success="排班已添加">
+    <div class="modal-body">
+      <div class="row mb-3">
+        <div class="col-6"><label class="form-label">咨询师 *</label>
+          <select class="form-select" id="s_cou" required>
+            {% for c in counselors %}<option value="{{ c.id }}">{{ c.name }} ({{ c.title or '咨询师' }})</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-6"><label class="form-label">房间 *</label>
+          <select class="form-select" id="s_room" required>
+            {% for r in rooms %}<option value="{{ r.id }}">{{ r.room_number }} · {{ r.room_type }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="mb-3"><label class="form-label">日期 *</label><input type="date" class="form-control" id="s_date" value="{{ week_dates[0] }}" required></div>
+      <div class="row mb-3">
+        <div class="col-6"><label class="form-label">开始时间 *</label><input type="time" class="form-control" id="s_st" value="09:00" required></div>
+        <div class="col-6"><label class="form-label">结束时间 *</label><input type="time" class="form-control" id="s_et" value="10:00" required></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button type="submit" class="btn btn-primary-bs">确认排班</button></div>
+  </form>
+</div></div></div>
+{% endblock %}
