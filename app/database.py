@@ -559,19 +559,20 @@ def calculate_risk_level(anonymous_user_id):
     no_show_count = au['no_show_count']
     
     thirty_days_ago = (date.today() - timedelta(days=30)).isoformat()
-    c.execute("""SELECT COUNT(*) as total,
-                        SUM(CASE WHEN no_show_marked = 1 THEN 1 ELSE 0 END) as noshow,
-                        SUM(CASE WHEN checkin_status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
+    c.execute("""SELECT 
+                    SUM(CASE WHEN checkin_status != 'cancelled' THEN 1 ELSE 0 END) as total_valid,
+                    SUM(CASE WHEN no_show_marked = 1 AND checkin_status != 'cancelled' THEN 1 ELSE 0 END) as noshow,
+                    SUM(CASE WHEN checkin_status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
                  FROM appointments 
                  WHERE anonymous_user_id = ? 
-                 AND appointment_date >= ?
-                 AND checkin_status != 'cancelled' OR (checkin_status = 'cancelled' AND anonymous_user_id = ? AND appointment_date >= ?)""",
-              (anonymous_user_id, thirty_days_ago, anonymous_user_id, thirty_days_ago))
+                 AND appointment_date >= ?""",
+              (anonymous_user_id, thirty_days_ago))
     
     stats = c.fetchone()
-    total = stats['total'] if stats else 0
-    noshow_count = stats['noshow'] if stats else 0
-    cancelled_count = stats['cancelled'] if stats else 0
+    total_valid = (stats['total_valid'] or 0) if stats else 0
+    noshow_count = (stats['noshow'] or 0) if stats else 0
+    cancelled_count = (stats['cancelled'] or 0) if stats else 0
+    total_with_cancelled = total_valid + cancelled_count
     
     risk_level = 'low'
     reasons = []
@@ -583,15 +584,15 @@ def calculate_risk_level(anonymous_user_id):
         risk_level = 'medium'
         reasons.append(f'连续失约{no_show_count}次')
     
-    if total > 5 and noshow_count / total > 0.3:
+    if total_valid > 5 and noshow_count / total_valid > 0.3:
         if risk_level != 'high':
             risk_level = 'high' if risk_level == 'medium' else 'medium'
-        reasons.append(f'近30天失约率{round(noshow_count/total*100,1)}%')
+        reasons.append(f'近30天失约率{round(noshow_count/total_valid*100,1)}%')
     
-    if total > 3 and cancelled_count / total > ABNORMAL_CANCEL_RATE_THRESHOLD:
+    if total_with_cancelled > 3 and cancelled_count / total_with_cancelled > ABNORMAL_CANCEL_RATE_THRESHOLD:
         if risk_level == 'low':
             risk_level = 'medium'
-        reasons.append(f'近30天取消率{round(cancelled_count/total*100,1)}%')
+        reasons.append(f'近30天取消率{round(cancelled_count/total_with_cancelled*100,1)}%')
     
     conn.close()
     return risk_level, '；'.join(reasons) if reasons else '正常'
@@ -916,6 +917,7 @@ def get_weekly_report(week_offset=0):
                     SUM(CASE WHEN no_show_marked = 1 THEN 1 ELSE 0 END) as noshow_count
                  FROM appointments
                  WHERE appointment_date BETWEEN ? AND ?
+                   AND checkin_status != 'cancelled'
                  GROUP BY hour_slot
                  ORDER BY noshow_count DESC, total_appointments DESC""",
               (week_start, week_end))
@@ -936,8 +938,9 @@ def get_weekly_report(week_offset=0):
               (week_start, week_end))
     daily_stats = dict_rows(c.fetchall())
     for ds in daily_stats:
-        ds['noshow_rate'] = round(ds['noshow'] / ds['total'] * 100, 1) if ds['total'] > 0 else 0
-        ds['attend_rate'] = round(ds['checked'] / ds['total'] * 100, 1) if ds['total'] > 0 else 0
+        valid_total = ds['total'] - ds['cancelled']
+        ds['noshow_rate'] = round(ds['noshow'] / valid_total * 100, 1) if valid_total > 0 else 0
+        ds['attend_rate'] = round(ds['checked'] / valid_total * 100, 1) if valid_total > 0 else 0
     
     c.execute("SELECT COUNT(*) as cnt FROM risk_warnings WHERE date(created_at) BETWEEN ? AND ?",
               (week_start, week_end))
@@ -945,7 +948,7 @@ def get_weekly_report(week_offset=0):
     
     conn.close()
     
-    total_appts = sum(d['total'] for d in daily_stats)
+    total_appts = sum(d['total'] - d['cancelled'] for d in daily_stats)
     total_noshow = sum(d['noshow'] for d in daily_stats)
     overall_noshow_rate = round(total_noshow / total_appts * 100, 1) if total_appts > 0 else 0
     
@@ -988,9 +991,9 @@ def get_monthly_report(month_offset=0):
     c = conn.cursor()
     
     c.execute("""SELECT r.id, r.room_number, r.room_type,
-                        COUNT(a.id) as usage_count,
+                        COUNT(CASE WHEN a.checkin_status != 'cancelled' THEN a.id ELSE NULL END) as usage_count,
                         SUM(CASE WHEN a.checkin_status = 'checked_in' THEN 1 ELSE 0 END) as checked_count,
-                        SUM(CASE WHEN a.no_show_marked = 1 THEN 1 ELSE 0 END) as noshow_count,
+                        SUM(CASE WHEN a.no_show_marked = 1 AND a.checkin_status != 'cancelled' THEN 1 ELSE 0 END) as noshow_count,
                         SUM(CASE WHEN a.checkin_status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count
                  FROM rooms r
                  LEFT JOIN appointments a ON r.id = a.room_id 
@@ -1018,6 +1021,7 @@ def get_monthly_report(month_offset=0):
                     SUM(CASE WHEN no_show_marked = 1 THEN 1 ELSE 0 END) as noshow_count
                  FROM appointments
                  WHERE appointment_date BETWEEN ? AND ?
+                   AND checkin_status != 'cancelled'
                  GROUP BY hour_slot
                  ORDER BY noshow_count DESC, total_appointments DESC""",
               (month_start, month_end))
@@ -1030,7 +1034,8 @@ def get_monthly_report(month_offset=0):
                         MIN(appointment_date) as week_start,
                         COUNT(*) as total,
                         SUM(CASE WHEN no_show_marked = 1 THEN 1 ELSE 0 END) as noshow,
-                        SUM(CASE WHEN checkin_status = 'checked_in' THEN 1 ELSE 0 END) as checked
+                        SUM(CASE WHEN checkin_status = 'checked_in' THEN 1 ELSE 0 END) as checked,
+                        SUM(CASE WHEN checkin_status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
                  FROM appointments
                  WHERE appointment_date BETWEEN ? AND ?
                  GROUP BY week_num
@@ -1038,8 +1043,9 @@ def get_monthly_report(month_offset=0):
               (month_start, month_end))
     weekly_trend = dict_rows(c.fetchall())
     for wt in weekly_trend:
-        wt['noshow_rate'] = round(wt['noshow'] / wt['total'] * 100, 1) if wt['total'] > 0 else 0
-        wt['attend_rate'] = round(wt['checked'] / wt['total'] * 100, 1) if wt['total'] > 0 else 0
+        valid_total = wt['total'] - wt['cancelled']
+        wt['noshow_rate'] = round(wt['noshow'] / valid_total * 100, 1) if valid_total > 0 else 0
+        wt['attend_rate'] = round(wt['checked'] / valid_total * 100, 1) if valid_total > 0 else 0
     
     c.execute("SELECT COUNT(*) as cnt FROM risk_warnings WHERE date(created_at) BETWEEN ? AND ?",
               (month_start, month_end))
@@ -1050,7 +1056,7 @@ def get_monthly_report(month_offset=0):
     
     conn.close()
     
-    total_appts = sum(wt['total'] for wt in weekly_trend)
+    total_appts = sum(wt['total'] - wt['cancelled'] for wt in weekly_trend)
     total_noshow = sum(wt['noshow'] for wt in weekly_trend)
     overall_noshow_rate = round(total_noshow / total_appts * 100, 1) if total_appts > 0 else 0
     

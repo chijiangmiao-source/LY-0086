@@ -89,9 +89,5 @@ if __name__ == '__main__':
     if len(sys.argv) >= 2:
         port = int(sys.argv[1])
     print(f"Server starting on http://{host}:{port}")
-    print("Default accounts:")
-    print("  admin / admin123   (系统管理员)")
-    print("  staff01 / staff123 (前台工作人员)")
-    print("  intervention / staff123 (干预专员)")
     print(f"  Anonymous booking: http://{host}:{port}/anonymous/book")
     serve(app, host=host, port=port)

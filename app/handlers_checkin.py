@@ -10,13 +10,13 @@ def require_permission(req, resp, permission):
     user = req.context.user
     if not user:
         resp.status = falcon.HTTP_401
-        resp.media = {'error': '未登录'}
-        resp.complete = True
+        resp.content_type = 'application/json'
+        resp.text = '{"error": "未登录"}'
         return False
     if not has_permission(user['role'], permission):
         resp.status = falcon.HTTP_403
-        resp.media = {'error': '权限不足'}
-        resp.complete = True
+        resp.content_type = 'application/json'
+        resp.text = '{"error": "权限不足"}'
         return False
     return True
 

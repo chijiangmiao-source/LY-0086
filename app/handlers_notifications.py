@@ -44,7 +44,8 @@ class NotificationsApi:
         user = req.context.user
         if not has_permission(user['role'], 'view_notifications'):
             resp.status = falcon.HTTP_403
-            resp.media = {'error': '权限不足'}
+            resp.content_type = 'application/json'
+            resp.text = '{"error": "权限不足"}'
             return
 
         unread_only = req.get_param('unread') == '1'
@@ -62,7 +63,8 @@ class MarkNotificationReadApi:
         user = req.context.user
         if not has_permission(user['role'], 'view_notifications'):
             resp.status = falcon.HTTP_403
-            resp.media = {'error': '权限不足'}
+            resp.content_type = 'application/json'
+            resp.text = '{"error": "权限不足"}'
             return
 
         form = req.get_media() or {}

@@ -103,7 +103,8 @@ class ReportExportApi:
         user = req.context.user
         if not has_permission(user['role'], 'export_reports'):
             resp.status = falcon.HTTP_403
-            resp.media = {'error': '权限不足'}
+            resp.content_type = 'application/json'
+            resp.text = '{"error": "权限不足"}'
             return
 
         report_type = req.get_param('type') or 'week'

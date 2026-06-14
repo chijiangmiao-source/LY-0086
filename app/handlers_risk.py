@@ -9,13 +9,13 @@ def require_permission(req, resp, permission):
     user = req.context.user
     if not user:
         resp.status = falcon.HTTP_401
-        resp.media = {'error': '未登录'}
-        resp.complete = True
+        resp.content_type = 'application/json'
+        resp.text = '{"error": "未登录"}'
         return False
     if not has_permission(user['role'], permission):
         resp.status = falcon.HTTP_403
-        resp.media = {'error': '权限不足'}
-        resp.complete = True
+        resp.content_type = 'application/json'
+        resp.text = '{"error": "权限不足"}'
         return False
     return True
 
@@ -116,10 +116,11 @@ class ResolveWarningApi:
         user = req.context.user
         form = req.get_media() or {}
         warning_id = form.get('warning_id')
-        note = (form.get('resolution_note') or '').strip()
+        note = form.get('resolution_note', '')
         if not warning_id:
             resp.status = falcon.HTTP_400
-            resp.media = {'error': '预警ID必填'}
+            resp.content_type = 'application/json'
+            resp.text = '{"error": "预警ID必填"}'
             return
         resolve_risk_warning(warning_id, user['user_id'], note)
         resp.media = {'success': True}
