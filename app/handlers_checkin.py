@@ -1,7 +1,8 @@
 import falcon
 from datetime import datetime, timedelta, date
 from app.templates import render_template
-from app.database import (get_conn, dict_rows, dict_row, increment_no_show, lift_cooldown)
+from app.database import (get_conn, dict_rows, dict_row, increment_no_show, lift_cooldown,
+                          reset_consecutive_no_show)
 from config import CHECKIN_WINDOW_MINUTES_BEFORE, CHECKIN_WINDOW_MINUTES_AFTER, COOLDOWN_DAYS
 
 class CheckinApi:
@@ -53,6 +54,7 @@ class CheckinApi:
         if apt['anonymous_user_id']:
             c.execute("UPDATE anonymous_users SET last_visit_date = ? WHERE id = ?",
                       (date.today().isoformat(), apt['anonymous_user_id']))
+            reset_consecutive_no_show(apt['anonymous_user_id'], reason='正常签到履约')
         conn.commit()
         conn.close()
         resp.media = {'success': True, 'checkin_time': now.strftime('%H:%M:%S')}
@@ -85,8 +87,9 @@ class MarkNoShowApi:
         c.execute("UPDATE appointments SET no_show_marked = 1, intervention_status = 'pending' WHERE id = ?", (apt_id,))
         cooldown_until = None
         cooldown_reason = None
+        noshow_count = None
         if apt['anonymous_user_id']:
-            cooldown_until, cooldown_reason = increment_no_show(apt['anonymous_user_id'], apt['anonymous_code'])
+            cooldown_until, cooldown_reason, noshow_count = increment_no_show(apt['anonymous_user_id'], apt['anonymous_code'])
         c.execute("""INSERT INTO intervention_records 
             (appointment_id, anonymous_user_id, anonymous_code, operator_id, action_type, remark, old_status, new_status)
             VALUES (?,?,?,?,?,?,?,?)""",
@@ -122,6 +125,8 @@ class CancelAppointmentApi:
             resp.media = {'error': '已签到的预约不能取消'}
             return
         c.execute("UPDATE appointments SET checkin_status = 'cancelled' WHERE id = ?", (apt_id,))
+        if apt['anonymous_user_id']:
+            reset_consecutive_no_show(apt['anonymous_user_id'], reason='主动取消预约')
         c.execute("""INSERT INTO intervention_records 
             (appointment_id, anonymous_user_id, anonymous_code, operator_id, action_type, remark, old_status, new_status)
             VALUES (?,?,?,?,?,?,?,?)""",
@@ -192,6 +197,10 @@ class LiftCooldownApi:
 class InterventionRemarkApi:
     def on_post(self, req, resp):
         user = req.context.user
+        if user['role'] not in ('admin', 'intervention'):
+            resp.status = falcon.HTTP_403
+            resp.media = {'error': '仅管理员或干预专员可处理干预备注'}
+            return
         form = req.get_media() or {}
         apt_id = form.get('appointment_id')
         status = form.get('status') or 'contacted'

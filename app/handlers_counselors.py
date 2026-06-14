@@ -1,7 +1,7 @@
 import falcon
 from datetime import datetime, date, timedelta
 from app.templates import render_template
-from app.database import get_conn, dict_rows, dict_row
+from app.database import get_conn, dict_rows, dict_row, check_schedule_counselor_conflict, check_schedule_room_conflict
 
 class CounselorsPage:
     def on_get(self, req, resp):
@@ -119,6 +119,20 @@ class ScheduleApi:
         if not all([counselor_id, room_id, schedule_date, start_time, end_time]):
             resp.status = falcon.HTTP_400
             resp.media = {'error': '所有字段必填'}
+            return
+        if start_time >= end_time:
+            resp.status = falcon.HTTP_400
+            resp.media = {'error': '结束时间必须晚于开始时间'}
+            return
+        counselor_conflict = check_schedule_counselor_conflict(counselor_id, schedule_date, start_time, end_time)
+        if counselor_conflict:
+            resp.status = falcon.HTTP_400
+            resp.media = {'error': f'咨询师时间冲突：{counselor_conflict["start_time"]}-{counselor_conflict["end_time"]} 已安排排班'}
+            return
+        room_conflict = check_schedule_room_conflict(room_id, schedule_date, start_time, end_time)
+        if room_conflict:
+            resp.status = falcon.HTTP_400
+            resp.media = {'error': f'房间时间冲突：{room_conflict["start_time"]}-{room_conflict["end_time"]} 已被咨询师 {room_conflict["counselor_name"]} 占用'}
             return
         conn = get_conn()
         c = conn.cursor()

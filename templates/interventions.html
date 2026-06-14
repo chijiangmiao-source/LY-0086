@@ -63,7 +63,7 @@
               <td><div style="font-weight:600;">{{ a.appointment_date }}</div><div style="font-size:12px;color:#7b88a1;">{{ a.start_time }} - {{ a.end_time }}</div></td>
               <td>{{ a.counselor_name }}</td>
               <td><code>{{ a.anonymous_code }}</code></td>
-              <td><button class="btn btn-sm btn-primary-bs" onclick="addRemark({{ a.id }}, '{{ a.anonymous_code }}')"><i class="bi bi-chat-dots"></i> 处理干预</button></td>
+              <td>{% if can_intervene %}<button class="btn btn-sm btn-primary-bs" onclick="addRemark({{ a.id }}, '{{ a.anonymous_code }}')"><i class="bi bi-chat-dots"></i> 处理干预</button>{% else %}<span class="text-secondary" style="font-size:12px;"><i class="bi bi-lock"></i> 无权限</span>{% endif %}</td>
             </tr>
             {% endfor %}
           </tbody>

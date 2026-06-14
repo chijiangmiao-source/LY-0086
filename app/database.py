@@ -251,7 +251,116 @@ def increment_no_show(anonymous_user_id, anonymous_code):
               (new_count, cooldown_until, reason, anonymous_user_id))
     conn.commit()
     conn.close()
-    return cooldown_until, reason
+    return cooldown_until, reason, new_count
+
+def reset_consecutive_no_show(anonymous_user_id, reason='正常履约'):
+    if not anonymous_user_id:
+        return
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE anonymous_users SET no_show_count = 0 WHERE id = ? AND no_show_count > 0", (anonymous_user_id,))
+    conn.commit()
+    conn.close()
+
+def check_schedule_counselor_conflict(counselor_id, schedule_date, start_time, end_time, exclude_schedule_id=None):
+    conn = get_conn()
+    c = conn.cursor()
+    query = """SELECT * FROM schedules WHERE counselor_id = ? AND schedule_date = ? AND status = 'active'"""
+    params = [counselor_id, schedule_date]
+    if exclude_schedule_id:
+        query += " AND id != ?"
+        params.append(exclude_schedule_id)
+    c.execute(query, params)
+    rows = c.fetchall()
+    conn.close()
+    for row in rows:
+        if check_time_overlap(start_time, end_time, row['start_time'], row['end_time']):
+            return dict(row)
+    return None
+
+def check_schedule_room_conflict(room_id, schedule_date, start_time, end_time, exclude_schedule_id=None):
+    conn = get_conn()
+    c = conn.cursor()
+    query = """SELECT s.*, cou.name as counselor_name FROM schedules s
+               JOIN counselors cou ON s.counselor_id = cou.id
+               WHERE s.room_id = ? AND s.schedule_date = ? AND s.status = 'active'"""
+    params = [room_id, schedule_date]
+    if exclude_schedule_id:
+        query += " AND s.id != ?"
+        params.append(exclude_schedule_id)
+    c.execute(query, params)
+    rows = c.fetchall()
+    conn.close()
+    for row in rows:
+        if check_time_overlap(start_time, end_time, row['start_time'], row['end_time']):
+            return dict(row)
+    return None
+
+def check_schedule_capacity(schedule_id):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""SELECT s.capacity,
+                        (SELECT COUNT(*) FROM appointments a
+                         WHERE a.schedule_id = s.id
+                         AND a.checkin_status != 'cancelled'
+                         AND a.no_show_marked = 0) as booked
+                 FROM schedules s WHERE s.id = ?""", (schedule_id,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return None
+    booked = row['booked']
+    capacity = row['capacity'] or 1
+    return {
+        'booked': booked,
+        'capacity': capacity,
+        'available': max(0, capacity - booked),
+        'full': booked >= capacity,
+    }
+
+def check_appointment_counselor_conflict(counselor_id, appointment_date, start_time, end_time, exclude_appointment_id=None):
+    conn = get_conn()
+    c = conn.cursor()
+    query = """SELECT a.*, r.room_number
+               FROM appointments a
+               JOIN rooms r ON a.room_id = r.id
+               WHERE a.counselor_id = ?
+               AND a.appointment_date = ?
+               AND a.checkin_status != 'cancelled'
+               AND a.no_show_marked = 0"""
+    params = [counselor_id, appointment_date]
+    if exclude_appointment_id:
+        query += " AND a.id != ?"
+        params.append(exclude_appointment_id)
+    c.execute(query, params)
+    rows = c.fetchall()
+    conn.close()
+    for row in rows:
+        if check_time_overlap(start_time, end_time, row['start_time'], row['end_time']):
+            return dict(row)
+    return None
+
+def check_appointment_room_conflict(room_id, appointment_date, start_time, end_time, exclude_appointment_id=None):
+    conn = get_conn()
+    c = conn.cursor()
+    query = """SELECT a.*, cou.name as counselor_name
+               FROM appointments a
+               JOIN counselors cou ON a.counselor_id = cou.id
+               WHERE a.room_id = ?
+               AND a.appointment_date = ?
+               AND a.checkin_status != 'cancelled'
+               AND a.no_show_marked = 0"""
+    params = [room_id, appointment_date]
+    if exclude_appointment_id:
+        query += " AND a.id != ?"
+        params.append(exclude_appointment_id)
+    c.execute(query, params)
+    rows = c.fetchall()
+    conn.close()
+    for row in rows:
+        if check_time_overlap(start_time, end_time, row['start_time'], row['end_time']):
+            return dict(row)
+    return None
 
 def lift_cooldown(anonymous_user_id, operator_id, remark=''):
     conn = get_conn()

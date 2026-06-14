@@ -4,7 +4,9 @@ from datetime import datetime, date, timedelta
 from app.templates import render_template
 from app.database import (get_conn, dict_rows, dict_row, generate_appointment_no,
                           create_or_get_anonymous_user, is_in_cooldown,
-                          check_concurrent_appointment, check_time_overlap)
+                          check_concurrent_appointment, check_time_overlap,
+                          check_schedule_capacity, check_appointment_counselor_conflict,
+                          check_appointment_room_conflict)
 from config import CHECKIN_WINDOW_MINUTES_BEFORE, CHECKIN_WINDOW_MINUTES_AFTER, NO_SHOW_THRESHOLD, COOLDOWN_DAYS
 
 class AnonymousBookPage:
@@ -68,10 +70,29 @@ class AnonymousBookCheck:
             resp.status = falcon.HTTP_400
             resp.media = {'error': f'您正处于冷静期，至{cd_until}后方可预约'}
             return
+        capacity_info = check_schedule_capacity(schedule_id)
+        if capacity_info is None:
+            resp.status = falcon.HTTP_400
+            resp.media = {'error': '排班不存在'}
+            return
+        if capacity_info['full']:
+            resp.status = falcon.HTTP_400
+            resp.media = {'error': f'该时段已满员（{capacity_info["booked"]}/{capacity_info["capacity"]}）'}
+            return
         conflict = check_concurrent_appointment(anonymous_code, target_date, sched['start_time'], sched['end_time'])
         if conflict:
             resp.status = falcon.HTTP_400
             resp.media = {'error': f'同时段已有预约：{conflict["counselor_name"]} {conflict["start_time"]}-{conflict["end_time"]} ({conflict["room_number"]})'}
+            return
+        counselor_conflict = check_appointment_counselor_conflict(sched['counselor_id'], target_date, sched['start_time'], sched['end_time'])
+        if counselor_conflict:
+            resp.status = falcon.HTTP_400
+            resp.media = {'error': f'咨询师时段冲突：{sched["counselor_name"]} 在 {sched["start_time"]}-{sched["end_time"]} 于 {counselor_conflict["room_number"]} 已有预约'}
+            return
+        room_conflict = check_appointment_room_conflict(sched['room_id'], target_date, sched['start_time'], sched['end_time'])
+        if room_conflict:
+            resp.status = falcon.HTTP_400
+            resp.media = {'error': f'房间冲突：{sched["room_number"]} 在 {sched["start_time"]}-{sched["end_time"]} 已被 {room_conflict["counselor_name"]} 预约'}
             return
         resp.media = {
             'ok': True,
@@ -114,6 +135,29 @@ class AnonymousBookSubmit:
             conn.close()
             resp.status = falcon.HTTP_400
             resp.media = {'error': '同时段已有有效预约'}
+            return
+        capacity_info = check_schedule_capacity(schedule_id)
+        if capacity_info is None:
+            conn.close()
+            resp.status = falcon.HTTP_400
+            resp.media = {'error': '排班不存在'}
+            return
+        if capacity_info['full']:
+            conn.close()
+            resp.status = falcon.HTTP_400
+            resp.media = {'error': f'该时段已满员（{capacity_info["booked"]}/{capacity_info["capacity"]}）'}
+            return
+        counselor_conflict = check_appointment_counselor_conflict(sched['counselor_id'], target_date, sched['start_time'], sched['end_time'])
+        if counselor_conflict:
+            conn.close()
+            resp.status = falcon.HTTP_400
+            resp.media = {'error': f'咨询师时段冲突：{sched["counselor_id"]}号咨询师 于 {sched["start_time"]}-{sched["end_time"]} 在房间 {counselor_conflict["room_number"]} 已有预约'}
+            return
+        room_conflict = check_appointment_room_conflict(sched['room_id'], target_date, sched['start_time'], sched['end_time'])
+        if room_conflict:
+            conn.close()
+            resp.status = falcon.HTTP_400
+            resp.media = {'error': f'房间冲突：{sched["room_id"]}号房间 在 {sched["start_time"]}-{sched["end_time"]} 已被 {room_conflict["counselor_name"]} 预约'}
             return
         au = create_or_get_anonymous_user(anonymous_code)
         apt_no = generate_appointment_no()
