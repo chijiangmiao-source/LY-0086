@@ -1,0 +1,164 @@
+{% extends "_base_app.html" %}
+{% block title %}复约转化分析 - 心理咨询室管理系统{% endblock %}
+{% block page_title %}<i class="bi bi-arrow-repeat me-1"></i>复约转化分析{% endblock %}
+{% block content %}
+
+<div class="card-panel mb-4">
+  <div class="card-header">
+    <div><h6 class="mb-0"><i class="bi bi-filter me-1"></i>筛选条件</h6></div>
+    <a href="/api/rebook/export?start_date={{ start_date }}&end_date={{ end_date }}" class="btn btn-sm btn-success"><i class="bi bi-download"></i> 导出</a>
+  </div>
+  <div class="card-body">
+    <form method="get" class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">开始日期</label>
+        <input type="date" name="start_date" class="form-control form-control-sm" value="{{ start_date }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">结束日期</label>
+        <input type="date" name="end_date" class="form-control form-control-sm" value="{{ end_date }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">咨询师</label>
+        <select name="counselor" class="form-select form-select-sm">
+          <option value="all">全部咨询师</option>
+          {% for c in counselor_list %}
+          <option value="{{ c.id }}" {% if counselor_filter == c.id %}selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary-bs btn-sm"><i class="bi bi-search"></i> 查询</button>
+        <a href="/rebook-analysis" class="btn btn-outline-secondary btn-sm ms-2"><i class="bi bi-x-lg"></i> 重置</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row mb-4 g-3">
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#eef2ff;color:#5e81ac;"><i class="bi bi-person-plus"></i></div><div class="stat-value">{{ funnel.first_time or 0 }}</div><div class="stat-label">首次咨询</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#dbeafe;color:#3b82f6;"><i class="bi bi-arrow-repeat"></i></div><div class="stat-value">{{ funnel.second_time or 0 }}</div><div class="stat-label">二次复约</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#dcfce7;color:#22c55e;"><i class="bi bi-arrow-clockwise"></i></div><div class="stat-value">{{ funnel.third_plus or 0 }}</div><div class="stat-label">三次及以上</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#fce7f3;color:#db2777;"><i class="bi bi-percent"></i></div><div class="stat-value">{{ funnel.second_rate or 0 }}%</div><div class="stat-label">首→二转化率</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:#d97706;"><i class="bi bi-graph-up"></i></div><div class="stat-value">{{ funnel.third_rate or 0 }}%</div><div class="stat-label">二→三转化率</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#ecfdf5;color:#10b981;"><i class="bi bi-trophy"></i></div><div class="stat-value">{{ funnel.overall_rate or 0 }}%</div><div class="stat-label">整体复约率</div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-6">
+    <div class="card-panel">
+      <div class="card-header"><div><h6 class="mb-0"><i class="bi bi-funnel me-1"></i>复约漏斗图</h6></div></div>
+      <div class="card-body">
+        <div style="max-width:400px;margin:0 auto;">
+          <div class="text-center mb-2">
+            <div class="d-inline-block bg-primary text-white rounded py-2 px-4" style="width:100%;">
+              <div style="font-size:24px;font-weight:700;">{{ funnel.first_time or 0 }}</div>
+              <div class="small">首次咨询</div>
+            </div>
+          </div>
+          <div class="text-center my-1"><i class="bi bi-chevron-down text-secondary"></i></div>
+          <div class="text-center mb-2">
+            <div class="d-inline-block bg-info text-white rounded py-2 px-4" style="width:70%;">
+              <div style="font-size:24px;font-weight:700;">{{ funnel.second_time or 0 }}</div>
+              <div class="small">二次复约 ({{ funnel.second_rate or 0 }}%)</div>
+            </div>
+          </div>
+          <div class="text-center my-1"><i class="bi bi-chevron-down text-secondary"></i></div>
+          <div class="text-center mb-2">
+            <div class="d-inline-block bg-success text-white rounded py-2 px-4" style="width:45%;">
+              <div style="font-size:24px;font-weight:700;">{{ funnel.third_plus or 0 }}</div>
+              <div class="small">三次及以上 ({{ funnel.third_rate or 0 }}%)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card-panel">
+      <div class="card-header"><div><h6 class="mb-0"><i class="bi bi-pie-chart me-1"></i>咨询次数分布</h6></div></div>
+      <div class="card-body">
+        <canvas id="rebookPie" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card-panel">
+  <div class="card-header"><div><h6 class="mb-0"><i class="bi bi-person me-1"></i>咨询师复约率排行</h6></div></div>
+  <div class="card-body p-0">
+    {% if counselor_rebook %}
+    <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="font-size:14px;">
+      <thead class="table-light">
+        <tr>
+          <th width="80">排名</th>
+          <th>咨询师</th>
+          <th width="100">首次咨询</th>
+          <th width="100">二次复约</th>
+          <th width="120">复约率</th>
+          <th width="100">三次以上</th>
+          <th width="120">持续率</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in counselor_rebook %}
+        <tr>
+          <td>
+            {% if loop.index == 1 %}<span class="badge bg-warning text-dark">🥇 {{ loop.index }}</span>
+            {% elif loop.index == 2 %}<span class="badge bg-secondary">🥈 {{ loop.index }}</span>
+            {% elif loop.index == 3 %}<span class="badge bg-info">🥉 {{ loop.index }}</span>
+            {% else %}<span class="text-muted">{{ loop.index }}</span>{% endif %}
+          </td>
+          <td style="font-weight:500;">{{ c.counselor_name }}</td>
+          <td>{{ c.first_time or 0 }}</td>
+          <td>{{ c.second_time or 0 }}</td>
+          <td>
+            <div class="d-flex align-items-center">
+              <span class="me-2 {% if c.rebook_rate and c.rebook_rate >= 60 %}text-success fw-bold{% elif c.rebook_rate and c.rebook_rate >= 30 %}text-info{% else %}text-secondary{% endif %}">
+                {{ c.rebook_rate or 0 }}%
+              </span>
+              <div class="progress flex-grow-1" style="height:6px;">
+                <div class="progress-bar {% if c.rebook_rate and c.rebook_rate >= 60 %}bg-success{% elif c.rebook_rate and c.rebook_rate >= 30 %}bg-info{% else %}bg-secondary{% endif %}" style="width:{{ c.rebook_rate or 0 }}%"></div>
+              </div>
+            </div>
+          </td>
+          <td>{{ c.third_plus or 0 }}</td>
+          <td>
+            <span class="{% if c.continuation_rate and c.continuation_rate >= 50 %}text-success{% else %}text-secondary{% endif %}">{{ c.continuation_rate or 0 }}%</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-secondary"><i class="bi bi-people" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">暂无复约数据</div></div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var pieCtx = document.getElementById('rebookPie');
+  if (pieCtx && typeof Chart !== 'undefined') {
+    new Chart(pieCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['仅1次', '2次', '3次及以上'],
+        datasets: [{
+          data: {{ pie_data|tojson }},
+          backgroundColor: ['#94a3b8', '#3b82f6', '#10b981'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom' } },
+        cutout: '60%'
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

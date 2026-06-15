@@ -1,7 +1,7 @@
 import falcon
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from app.templates import render_template
-from app.database import get_conn, dict_rows, dict_row
+from app.database import get_conn, dict_rows, dict_row, get_quality_overview
 from config import CHECKIN_WINDOW_MINUTES_BEFORE, CHECKIN_WINDOW_MINUTES_AFTER
 
 class Dashboard:
@@ -39,8 +39,46 @@ class Dashboard:
 
         c.execute("SELECT COUNT(*) as cnt FROM risk_warnings WHERE is_resolved = 0")
         unresolved_warnings = c.fetchone()['cnt']
+        
+        start_date = (date.today() - timedelta(days=30)).isoformat()
+        end_date = today
+        
+        quality_data = get_quality_overview(start_date, end_date) or {}
+        
+        c.execute("SELECT COUNT(*) as cnt FROM supervision_tasks WHERE status = 'pending'")
+        supervision_pending = c.fetchone()['cnt']
+        
+        c.execute("SELECT COUNT(*) as cnt FROM supervision_tasks")
+        supervision_total = c.fetchone()['cnt']
+        
+        c.execute("SELECT COUNT(*) as cnt FROM supervision_tasks WHERE status = 'completed'")
+        supervision_completed = c.fetchone()['cnt']
+        
+        supervision_completion_rate = 0
+        if supervision_total > 0:
+            supervision_completion_rate = round(supervision_completed / supervision_total * 100, 1)
+        
+        c.execute("SELECT COUNT(*) as cnt FROM high_risk_tracking WHERE is_closed = 0")
+        high_risk_count = c.fetchone()['cnt']
+        
+        c.execute("SELECT COUNT(*) as cnt FROM intervention_archives")
+        archive_count = c.fetchone()['cnt']
+        
+        c.execute("SELECT COUNT(*) as cnt FROM followup_surveys")
+        followup_count = c.fetchone()['cnt']
 
         conn.close()
+
+        qc_overview = {
+            'total_appointments': quality_data.get('total_appointments', 0),
+            'followup_count': followup_count,
+            'supervision_pending': supervision_pending,
+            'high_risk_count': high_risk_count,
+            'avg_satisfaction': quality_data.get('avg_satisfaction', 0),
+            'rebook_rate': quality_data.get('rebook_rate', 0),
+            'supervision_completion_rate': supervision_completion_rate,
+            'archive_count': archive_count,
+        }
 
         resp.content_type = 'text/html; charset=utf-8'
         resp.text = render_template('dashboard.html', {
@@ -54,6 +92,7 @@ class Dashboard:
             'active_counselors': active_counselors,
             'today_list': today_list,
             'unresolved_warnings': unresolved_warnings,
+            'qc_overview': qc_overview,
             'nav': 'dashboard',
             'year': datetime.now().year,
         })

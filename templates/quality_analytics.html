@@ -1,0 +1,247 @@
+{% extends "_base_app.html" %}
+{% block title %}质量分析总览 - 心理咨询室管理系统{% endblock %}
+{% block page_title %}<i class="bi bi-graph-up-arrow me-1"></i>全流程质量分析总览{% endblock %}
+{% block content %}
+
+<div class="card-panel mb-4">
+  <div class="card-header">
+    <div><h6 class="mb-0"><i class="bi bi-calendar-range me-1"></i>统计周期</h6></div>
+    <div class="btn-group btn-group-sm" role="group">
+      <a href="?days=7" class="btn {% if days==7 %}btn-primary-bs{% else %}btn-outline-secondary{% endif %}">近7天</a>
+      <a href="?days=30" class="btn {% if days==30 %}btn-primary-bs{% else %}btn-outline-secondary{% endif %}">近30天</a>
+      <a href="?days=90" class="btn {% if days==90 %}btn-primary-bs{% else %}btn-outline-secondary{% endif %}">近90天</a>
+      <a href="?days=180" class="btn {% if days==180 %}btn-primary-bs{% else %}btn-outline-secondary{% endif %}">近半年</a>
+    </div>
+  </div>
+</div>
+
+<div class="row mb-4 g-3">
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#eef2ff;color:#5e81ac;"><i class="bi bi-calendar-check"></i></div><div class="stat-value">{{ overview.total_appointments or 0 }}</div><div class="stat-label">咨询总人次</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#ecfdf5;color:#10b981;"><i class="bi bi-emoji-smile"></i></div><div class="stat-value">{{ overview.avg_satisfaction or 0 }}<span class="text-muted" style="font-size:14px;">分</span></div><div class="stat-label">平均满意度</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#fce7f3;color:#db2777;"><i class="bi bi-arrow-repeat"></i></div><div class="stat-value">{{ overview.rebook_rate or 0 }}<span class="text-muted" style="font-size:14px;">%</span></div><div class="stat-label">复约转化率</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:#d97706;"><i class="bi bi-person-check"></i></div><div class="stat-value">{{ overview.attendance_rate or 0 }}<span class="text-muted" style="font-size:14px;">%</span></div><div class="stat-label">平均到场率</div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-6">
+    <div class="card-panel">
+      <div class="card-header">
+        <div><h6 class="mb-0"><i class="bi bi-bar-chart me-1"></i>满意度趋势</h6></div>
+        <a href="/followup/analytics" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-right"></i> 详情</a>
+      </div>
+      <div class="card-body">
+        <canvas id="satisfactionTrend" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card-panel">
+      <div class="card-header">
+        <div><h6 class="mb-0"><i class="bi bi-pie-chart me-1"></i>风险预警分布</h6></div>
+        <a href="/risk-warnings" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-right"></i> 详情</a>
+      </div>
+      <div class="card-body">
+        <canvas id="riskDistribution" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card-panel mb-4">
+  <div class="card-header">
+    <div><h6 class="mb-0"><i class="bi bi-trophy me-1"></i>咨询师服务质量对比</h6></div>
+    <a href="/quality-comparison" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-right"></i> 完整对比</a>
+  </div>
+  <div class="card-body p-0">
+    {% if counselor_quality and counselor_quality|length > 0 %}
+    <div class="table-responsive">
+    <table class="table table-hover mb-0" style="font-size:14px;">
+      <thead class="table-light">
+        <tr>
+          <th>排名</th>
+          <th>咨询师</th>
+          <th>咨询人次</th>
+          <th>满意度</th>
+          <th>复约率</th>
+          <th>到场率</th>
+          <th>异常率</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in counselor_quality[:5] %}
+        <tr>
+          <td>
+            {% if loop.index == 1 %}<span class="badge bg-warning text-dark">🥇 第1名</span>
+            {% elif loop.index == 2 %}<span class="badge bg-secondary">🥈 第2名</span>
+            {% elif loop.index == 3 %}<span class="badge bg-info">🥉 第3名</span>
+            {% else %}<span class="text-muted">第{{ loop.index }}名</span>{% endif %}
+          </td>
+          <td style="font-weight:500;">{{ c.counselor_name }}</td>
+          <td>{{ c.total_sessions or 0 }}</td>
+          <td>
+            <div class="d-flex align-items-center">
+              <span class="{% if c.avg_satisfaction and c.avg_satisfaction >= 4.5 %}text-success fw-bold{% elif c.avg_satisfaction and c.avg_satisfaction >= 3.5 %}text-warning{% else %}text-danger{% endif %}">
+                {{ c.avg_satisfaction or 0 }}
+              </span>
+              <div class="progress ms-2" style="width:80px;height:6px;">
+                <div class="progress-bar bg-success" style="width:{{ (c.avg_satisfaction or 0) * 20 }}%"></div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <span class="{% if c.rebook_rate and c.rebook_rate >= 50 %}text-success{% else %}text-secondary{% endif %}">{{ c.rebook_rate or 0 }}%</span>
+          </td>
+          <td>
+            <span class="{% if c.attendance_rate and c.attendance_rate >= 90 %}text-success{% elif c.attendance_rate and c.attendance_rate >= 75 %}text-warning{% else %}text-danger{% endif %}">{{ c.attendance_rate or 0 }}%</span>
+          </td>
+          <td>
+            <span class="{% if c.abnormal_rate and c.abnormal_rate <= 5 %}text-success{% elif c.abnormal_rate and c.abnormal_rate <= 15 %}text-warning{% else %}text-danger{% endif %}">{{ c.abnormal_rate or 0 }}%</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="text-center py-4 text-secondary"><i class="bi bi-bar-chart" style="font-size:36px;opacity:0.3;"></i><div class="mt-2">暂无质量数据</div></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card-panel">
+      <div class="card-header">
+        <div><h6 class="mb-0"><i class="bi bi-graph-up me-1"></i>复约转化分析</h6></div>
+        <a href="/rebook-analysis" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-right"></i> 详情</a>
+      </div>
+      <div class="card-body">
+        {% if rebook_data %}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="small">首次咨询</span>
+            <span class="small fw-bold">{{ rebook_data.first_time_count or 0 }} 人次</span>
+          </div>
+          <div class="progress" style="height:24px;">
+            <div class="progress-bar bg-primary" style="width:100%;">100%</div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="small">二次复约</span>
+            <span class="small fw-bold">{{ rebook_data.second_time_count or 0 }} 人次 ({{ rebook_data.second_rebook_rate or 0 }}%)</span>
+          </div>
+          <div class="progress" style="height:24px;">
+            <div class="progress-bar bg-info" style="width:{{ rebook_data.second_rebook_rate or 0 }}%;">{{ rebook_data.second_rebook_rate or 0 }}%</div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="small">三次及以上</span>
+            <span class="small fw-bold">{{ rebook_data.third_plus_count or 0 }} 人次 ({{ rebook_data.third_plus_rate or 0 }}%)</span>
+          </div>
+          <div class="progress" style="height:24px;">
+            <div class="progress-bar bg-success" style="width:{{ rebook_data.third_plus_rate or 0 }}%;">{{ rebook_data.third_plus_rate or 0 }}%</div>
+          </div>
+        </div>
+        <div class="text-center mt-3 pt-3 border-top">
+          <div class="text-secondary small">总体复约转化率</div>
+          <div style="font-size:32px;font-weight:700;color:#3b82f6;">{{ rebook_data.overall_rebook_rate or 0 }}%</div>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-secondary"><i class="bi bi-graph-down" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">暂无复约数据</div></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card-panel">
+      <div class="card-header">
+        <div><h6 class="mb-0"><i class="bi bi-exclamation-triangle me-1"></i>督办任务统计</h6></div>
+        <a href="/supervision" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-right"></i> 详情</a>
+      </div>
+      <div class="card-body">
+        {% if supervision_stats %}
+        <div class="row g-3">
+          <div class="col-6 text-center">
+            <div style="font-size:28px;font-weight:700;color:#f59e0b;">{{ supervision_stats.pending or 0 }}</div>
+            <div class="small text-secondary">待处理</div>
+          </div>
+          <div class="col-6 text-center">
+            <div style="font-size:28px;font-weight:700;color:#3b82f6;">{{ supervision_stats.in_progress or 0 }}</div>
+            <div class="small text-secondary">处理中</div>
+          </div>
+          <div class="col-6 text-center">
+            <div style="font-size:28px;font-weight:700;color:#10b981;">{{ supervision_stats.completed or 0 }}</div>
+            <div class="small text-secondary">已完成</div>
+          </div>
+          <div class="col-6 text-center">
+            <div style="font-size:28px;font-weight:700;color:#ef4444;">{{ supervision_stats.overdue or 0 }}</div>
+            <div class="small text-secondary">超时</div>
+          </div>
+        </div>
+        <div class="mt-3 pt-3 border-top text-center">
+          <div class="text-secondary small">平均处理时长</div>
+          <div style="font-size:20px;font-weight:600;">{{ supervision_stats.avg_process_hours or 0 }} 小时</div>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-secondary"><i class="bi bi-list-check" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">暂无督办数据</div></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var trendCtx = document.getElementById('satisfactionTrend');
+  if (trendCtx && typeof Chart !== 'undefined') {
+    new Chart(trendCtx, {
+      type: 'line',
+      data: {
+        labels: {{ trend_labels|tojson }},
+        datasets: [{
+          label: '平均满意度',
+          data: {{ trend_values|tojson }},
+          borderColor: '#5e81ac',
+          backgroundColor: 'rgba(94, 129, 172, 0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: '#5e81ac'
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, max: 5 }
+        }
+      }
+    });
+  }
+
+  var riskCtx = document.getElementById('riskDistribution');
+  if (riskCtx && typeof Chart !== 'undefined') {
+    new Chart(riskCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['低风险', '中风险', '高风险'],
+        datasets: [{
+          data: {{ risk_data|tojson }},
+          backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom' }
+        },
+        cutout: '60%'
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

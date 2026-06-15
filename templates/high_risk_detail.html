@@ -1,0 +1,289 @@
+{% extends "_base_app.html" %}
+{% block title %}高风险跟踪详情 - 心理咨询室管理系统{% endblock %}
+{% block page_title %}
+<i class="bi bi-person-bounding-box me-1"></i>高风险跟踪详情 · {{ tracking.tracking_no }}
+<small class="text-muted ms-2">{{ tracking.masked_code }}</small>
+{% endblock %}
+{% block content %}
+
+<div class="row mb-4 g-3">
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex align-items-center">
+          <div class="flex-shrink-0">
+            <div class="rounded-circle bg-secondary-subtle d-flex align-items-center justify-content-center" style="width:50px;height:50px;">
+              <i class="bi bi-person text-secondary" style="font-size:24px;"></i>
+            </div>
+          </div>
+          <div class="flex-grow-1 ms-3">
+            <div class="fw-semibold">{{ tracking.masked_code }}</div>
+            <div class="small text-secondary">
+              {% if tracking.risk_level == 'high' %}<span class="badge risk-high">高风险</span>
+              {% elif tracking.risk_level == 'medium' %}<span class="badge risk-medium">中风险</span>
+              {% else %}<span class="badge risk-low">低风险</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card"><div class="stat-icon" style="background:#dbeafe;color:#3b82f6;"><i class="bi bi-person-check"></i></div><div class="stat-value text-sm">{{ tracking.counselor_name or '未指派' }}</div><div class="stat-label">负责咨询师</div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:#d97706;"><i class="bi bi-people"></i></div><div class="stat-value text-sm">{{ tracking.supervisor_name or '未指派' }}</div><div class="stat-label">督导</div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card"><div class="stat-icon" style="background:#ecfdf5;color:#10b981;"><i class="bi bi-calendar-check"></i></div><div class="stat-value">{{ tracking.followup_count or 0 }}</div><div class="stat-label">随访次数</div></div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-4">
+    <div class="card-panel mb-4">
+      <div class="card-header"><div><h6 class="mb-0"><i class="bi bi-info-circle me-1"></i>基本信息</h6></div></div>
+      <div class="card-body">
+        <dl class="row mb-0" style="font-size:14px;">
+          <dt class="col-5 text-secondary">跟踪编号</dt>
+          <dd class="col-7"><code>{{ tracking.tracking_no }}</code></dd>
+          <dt class="col-5 text-secondary">匿名编码</dt>
+          <dd class="col-7"><code>{{ tracking.masked_code }}</code></dd>
+          <dt class="col-5 text-secondary">当前状态</dt>
+          <dd class="col-7">
+            {% if tracking.current_status == 'monitoring' %}<span class="badge bg-info">跟踪观察</span>
+            {% elif tracking.current_status == 'intervening' %}<span class="badge bg-warning text-dark">干预中</span>
+            {% elif tracking.current_status == 'recovering' %}<span class="badge bg-success">恢复期</span>
+            {% elif tracking.current_status == 'closed' %}<span class="badge bg-secondary">已结案</span>
+            {% else %}<span class="badge bg-light text-dark">{{ tracking.current_status }}</span>{% endif %}
+          </dd>
+          <dt class="col-5 text-secondary">风险等级</dt>
+          <dd class="col-7">
+            {% if tracking.risk_level == 'high' %}<span class="badge risk-high">高风险</span>
+            {% elif tracking.risk_level == 'medium' %}<span class="badge risk-medium">中风险</span>
+            {% else %}<span class="badge risk-low">低风险</span>{% endif %}
+          </dd>
+          <dt class="col-5 text-secondary">建立日期</dt>
+          <dd class="col-7 small">{{ tracking.created_at[:10] if tracking.created_at else '-' }}</dd>
+          <dt class="col-5 text-secondary">上次随访</dt>
+          <dd class="col-7 small">{{ tracking.last_followup_date or '-' }}</dd>
+          <dt class="col-5 text-secondary">下次随访</dt>
+          <dd class="col-7 small">
+            {% if tracking.is_closed %}已结案
+            {% elif tracking.is_followup_due %}<span class="text-danger fw-bold">已到期</span>
+            {% else %}{{ tracking.next_followup_date or '-' }}{% endif %}
+          </dd>
+          <dt class="col-5 text-secondary">初始原因</dt>
+          <dd class="col-7 small" style="word-break:break-all;">{{ tracking.initial_risk_reason or '-' }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card-panel">
+      <div class="card-header"><div><h6 class="mb-0"><i class="bi bi-gear me-1"></i>操作</h6></div></div>
+      <div class="card-body">
+        {% if not tracking.is_closed %}
+        <button class="btn btn-success w-100 mb-2" onclick="addFollowupLog()"><i class="bi bi-chat-dots"></i> 添加随访记录</button>
+        <button class="btn btn-primary-bs w-100 mb-2" onclick="updateStatus()"><i class="bi bi-arrow-repeat"></i> 更新状态</button>
+        <button class="btn btn-warning w-100 mb-2" onclick="updateRisk()"><i class="bi bi-exclamation-triangle"></i> 调整风险等级</button>
+        <button class="btn btn-outline-danger w-100" onclick="closeTracking()"><i class="bi bi-x-circle"></i> 结案</button>
+        {% else %}
+        <div class="text-center text-secondary py-3">
+          <i class="bi bi-check2-circle" style="font-size:32px;"></i>
+          <div class="mt-2">已结案</div>
+          <div class="small mt-1">结案时间：{{ tracking.closed_at or '-' }}</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-8">
+    <div class="card-panel">
+      <div class="card-header">
+        <div><h6 class="mb-0"><i class="bi bi-clock-history me-1"></i>跟踪日志</h6></div>
+        <div class="text-secondary small">共 {{ logs|length }} 条记录</div>
+      </div>
+      <div class="card-body">
+        {% if logs %}
+        <div style="max-height:600px;overflow-y:auto;">
+          {% for log in logs %}
+          <div class="border-start border-3 border-primary ps-3 py-2 mb-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <span class="badge {% if log.log_type == 'followup' %}bg-info{% elif log.log_type == 'status_change' %}bg-warning text-dark{% elif log.log_type == 'risk_change' %}bg-danger{% elif log.log_type == 'intervention' %}bg-primary{% elif log.log_type == 'note' %}bg-secondary{% else %}bg-light text-dark{% endif %} me-2" style="font-size:11px;">
+                  {% if log.log_type == 'followup' %}随访
+                  {% elif log.log_type == 'status_change' %}状态变更
+                  {% elif log.log_type == 'risk_change' %}风险调整
+                  {% elif log.log_type == 'intervention' %}干预记录
+                  {% elif log.log_type == 'note' %}备注
+                  {% else %}{{ log.log_type }}{% endif %}
+                </span>
+                <small class="text-secondary">{{ log.created_at }}</small>
+                {% if log.mood_score %}
+                <span class="ms-2 small">情绪: 
+                  {% if log.mood_score|int >= 8 %}<span class="text-success">{{ log.mood_score }}</span>
+                  {% elif log.mood_score|int >= 5 %}<span class="text-warning">{{ log.mood_score }}</span>
+                  {% else %}<span class="text-danger">{{ log.mood_score }}</span>{% endif %}/10
+                </span>
+                {% endif %}
+                {% if log.risk_assessment %}
+                <span class="ms-2 small">
+                  风险: 
+                  {% if log.risk_assessment == 'high' %}<span class="text-danger">高</span>
+                  {% elif log.risk_assessment == 'medium' %}<span class="text-warning">中</span>
+                  {% else %}<span class="text-success">低</span>{% endif %}
+                </span>
+                {% endif %}
+              </div>
+              <div><small class="text-secondary">{{ log.operator_name or '系统' }}</small></div>
+            </div>
+            {% if log.content %}
+            <div class="mt-2" style="font-size:14px;white-space:pre-wrap;">{{ log.content }}</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-secondary">
+          <i class="bi bi-journal-x" style="font-size:48px;opacity:0.3;"></i>
+          <div class="mt-3">暂无跟踪日志</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function addFollowupLog() {
+  var html = '<div class="mb-3"><label class="form-label">随访内容</label><textarea id="logContent" class="form-control" rows="4" placeholder="请输入随访记录..."></textarea></div>' +
+    '<div class="row g-2 mb-3">' +
+    '<div class="col-6"><label class="form-label small">情绪评分(1-10)</label><input type="number" id="moodScore" class="form-control form-control-sm" min="1" max="10" value="5"></div>' +
+    '<div class="col-6"><label class="form-label small">风险评估</label><select id="riskAssess" class="form-select form-select-sm"><option value="high">高风险</option><option value="medium" selected>中风险</option><option value="low">低风险</option></select></div>' +
+    '</div>' +
+    '<div class="text-end"><button class="btn btn-success" onclick="submitLog()">保存随访</button></div>';
+  openModal('添加随访记录', html);
+}
+
+function submitLog() {
+  var content = document.getElementById('logContent').value;
+  var mood = document.getElementById('moodScore').value;
+  var risk = document.getElementById('riskAssess').value;
+  if (!content) { toastMsg('请输入随访内容', 'error'); return; }
+  
+  fetch('/api/high-risk-tracking/log', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      tracking_id: {{ tracking.id }},
+      log_type: 'followup',
+      content: content,
+      mood_score: mood,
+      risk_assessment: risk
+    })
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { toastMsg('随访记录已保存'); setTimeout(function(){ location.reload(); }, 800); }
+      else { toastMsg(d.error || '保存失败', 'error'); }
+    });
+}
+
+function updateStatus() {
+  var statuses = [
+    ['monitoring', '跟踪观察'],
+    ['intervening', '干预中'],
+    ['recovering', '恢复期']
+  ];
+  var options = '';
+  statuses.forEach(function(s) {
+    options += '<option value="' + s[0] + '" {% if tracking.current_status == "' + s[0] + '" %}selected{% endif %}>' + s[1] + '</option>';
+  });
+  
+  var html = '<div class="mb-3"><label class="form-label">新状态</label><select id="newStatus" class="form-select">' + options + '</select></div>' +
+    '<div class="mb-3"><label class="form-label">状态变更说明</label><textarea id="statusRemark" class="form-control" rows="3"></textarea></div>' +
+    '<div class="text-end"><button class="btn btn-primary-bs" onclick="submitStatusChange()">确认更新</button></div>';
+  openModal('更新状态', html);
+}
+
+function submitStatusChange() {
+  var status = document.getElementById('newStatus').value;
+  var remark = document.getElementById('statusRemark').value;
+  
+  fetch('/api/high-risk-tracking/log', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      tracking_id: {{ tracking.id }},
+      log_type: 'status_change',
+      content: remark,
+      new_status: status
+    })
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { toastMsg('状态已更新'); setTimeout(function(){ location.reload(); }, 800); }
+      else { toastMsg(d.error || '更新失败', 'error'); }
+    });
+}
+
+function updateRisk() {
+  var risks = [['high','高风险'],['medium','中风险'],['low','低风险']];
+  var options = '';
+  risks.forEach(function(r) {
+    options += '<option value="' + r[0] + '">' + r[1] + '</option>';
+  });
+  
+  var html = '<div class="mb-3"><label class="form-label">调整为</label><select id="newRisk" class="form-select">' + options + '</select></div>' +
+    '<div class="mb-3"><label class="form-label">调整原因</label><textarea id="riskRemark" class="form-control" rows="3"></textarea></div>' +
+    '<div class="text-end"><button class="btn btn-warning" onclick="submitRiskChange()">确认调整</button></div>';
+  openModal('调整风险等级', html);
+}
+
+function submitRiskChange() {
+  var risk = document.getElementById('newRisk').value;
+  var remark = document.getElementById('riskRemark').value;
+  
+  fetch('/api/high-risk-tracking', {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      tracking_id: {{ tracking.id }},
+      risk_level: risk,
+      adjust_reason: remark
+    })
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { toastMsg('风险等级已调整'); setTimeout(function(){ location.reload(); }, 800); }
+      else { toastMsg(d.error || '调整失败', 'error'); }
+    });
+}
+
+function closeTracking() {
+  var html = '<div class="mb-3"><label class="form-label">结案原因</label><select id="closeReason" class="form-select"><option value="recovered">已康复</option><option value="transferred">已转介</option><option value="other">其他</option></select></div>' +
+    '<div class="mb-3"><label class="form-label">结案总结</label><textarea id="closeRemark" class="form-control" rows="4" placeholder="请填写结案总结..."></textarea></div>' +
+    '<div class="text-end"><button class="btn btn-danger" onclick="submitClose()">确认结案</button></div>';
+  openModal('结案确认', html);
+}
+
+function submitClose() {
+  if (!confirmAction('确认要结案吗？结案后不可恢复。')) return;
+  
+  var reason = document.getElementById('closeReason').value;
+  var remark = document.getElementById('closeRemark').value;
+  
+  fetch('/api/high-risk-tracking/close', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      tracking_id: {{ tracking.id }},
+      close_reason: reason,
+      closing_remark: remark
+    })
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { toastMsg('已结案'); setTimeout(function(){ location.href = '/high-risk-tracking'; }, 1000); }
+      else { toastMsg(d.error || '操作失败', 'error'); }
+    });
+}
+</script>
+{% endblock %}

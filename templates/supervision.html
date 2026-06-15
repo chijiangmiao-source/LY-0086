@@ -1,0 +1,283 @@
+{% extends "_base_app.html" %}
+{% block title %}督办任务 - 心理咨询室管理系统{% endblock %}
+{% block page_title %}<i class="bi bi-list-check me-1"></i>督办任务管理 · 全流程质量闭环{% endblock %}
+{% block content %}
+
+<div class="row mb-4 g-3">
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#eef2ff;color:#5e81ac;"><i class="bi bi-inbox"></i></div><div class="stat-value">{{ summary.total or 0 }}</div><div class="stat-label">任务总数</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:#d97706;"><i class="bi bi-clock-history"></i></div><div class="stat-value">{{ summary.pending or 0 }}</div><div class="stat-label">待处理</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#dbeafe;color:#3b82f6;"><i class="bi bi-play-circle"></i></div><div class="stat-value">{{ summary.in_progress or 0 }}</div><div class="stat-label">处理中</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#ecfdf5;color:#10b981;"><i class="bi bi-check2-circle"></i></div><div class="stat-value">{{ summary.completed or 0 }}</div><div class="stat-label">已完成</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#fee2e2;color:#dc2626;"><i class="bi bi-exclamation-triangle"></i></div><div class="stat-value">{{ summary.overdue or 0 }}</div><div class="stat-label">已超时</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#fce7f3;color:#db2777;"><i class="bi bi-lightning-charge"></i></div><div class="stat-value">{{ summary.urgent_count or 0 }}</div><div class="stat-label">紧急任务</div></div></div>
+</div>
+
+<div class="card-panel mb-4">
+  <div class="card-header"><div><h6 class="mb-0"><i class="bi bi-filter me-1"></i>筛选条件</h6></div></div>
+  <div class="card-body">
+    <form method="get" class="row g-3">
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">状态</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="all" {% if status_filter=='all' %}selected{% endif %}>全部状态</option>
+          <option value="pending" {% if status_filter=='pending' %}selected{% endif %}>待处理</option>
+          <option value="in_progress" {% if status_filter=='in_progress' %}selected{% endif %}>处理中</option>
+          <option value="completed" {% if status_filter=='completed' %}selected{% endif %}>已完成</option>
+          <option value="cancelled" {% if status_filter=='cancelled' %}selected{% endif %}>已取消</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">优先级</label>
+        <select name="priority" class="form-select form-select-sm">
+          <option value="all" {% if priority_filter=='all' %}selected{% endif %}>全部优先级</option>
+          <option value="urgent" {% if priority_filter=='urgent' %}selected{% endif %}>紧急</option>
+          <option value="high" {% if priority_filter=='high' %}selected{% endif %}>高</option>
+          <option value="normal" {% if priority_filter=='normal' %}selected{% endif %}>普通</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">任务类型</label>
+        <select name="type" class="form-select form-select-sm">
+          <option value="all" {% if task_type_filter=='all' %}selected{% endif %}>全部类型</option>
+          {% for k, v in type_labels.items() %}
+          <option value="{{ k }}" {% if task_type_filter==k %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">匿名编码</label>
+        <input type="text" name="code" class="form-control form-control-sm" value="{{ anonymous_code }}" placeholder="输入匿名编码">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">其他</label>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="overdue" value="1" {% if is_overdue=='1' %}checked{% endif %} id="chkOverdue">
+          <label class="form-check-label small" for="chkOverdue">仅看超时</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="mine" value="1" {% if my_tasks=='1' %}checked{% endif %} id="chkMine">
+          <label class="form-check-label small" for="chkMine">指派给我</label>
+        </div>
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary-bs btn-sm"><i class="bi bi-search"></i> 筛选</button>
+        <a href="/supervision" class="btn btn-outline-secondary btn-sm ms-2"><i class="bi bi-x-lg"></i> 重置</a>
+        {% if can_manage %}
+        <button type="button" class="btn btn-success btn-sm ms-2" onclick="openCreateModal()"><i class="bi bi-plus-circle"></i> 新建</button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card-panel">
+  <div class="card-header">
+    <div><h6 class="mb-0"><i class="bi bi-list-task me-1"></i>任务列表</h6></div>
+    <div class="text-secondary small">共 {{ tasks|length }} 条记录</div>
+  </div>
+  <div class="card-body p-0">
+    {% if tasks %}
+    <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="font-size:14px;">
+      <thead class="table-light">
+        <tr>
+          <th>任务编号</th>
+          <th>优先级</th>
+          <th>标题</th>
+          <th>类型</th>
+          <th>匿名用户</th>
+          <th>指派给</th>
+          <th>状态</th>
+          <th>截止时间</th>
+          <th>剩余时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tasks %}
+        <tr {% if t.is_overdue and t.status not in ['completed','cancelled'] %}style="background:#fff5f5;"{% endif %}>
+          <td><code style="font-size:11px;">{{ t.task_no }}</code></td>
+          <td>
+            {% if t.priority == 'urgent' %}<span class="badge bg-danger">紧急</span>
+            {% elif t.priority == 'high' %}<span class="badge bg-warning text-dark">高</span>
+            {% else %}<span class="badge bg-secondary">普通</span>{% endif %}
+          </td>
+          <td style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ t.title }}">{{ t.title }}</td>
+          <td><small class="text-secondary">{{ type_labels.get(t.task_type, t.task_type) }}</small></td>
+          <td><code class="small">{{ t.masked_code }}</code></td>
+          <td><small>{{ t.assigned_to_name or '-' }}</small></td>
+          <td>
+            {% if t.status == 'pending' %}<span class="badge badge-pending">待处理</span>
+            {% elif t.status == 'in_progress' %}<span class="badge bg-primary">处理中</span>
+            {% elif t.status == 'completed' %}<span class="badge badge-checked">已完成</span>
+            {% else %}<span class="badge bg-secondary">已取消</span>{% endif %}
+          </td>
+          <td><small class="text-secondary">{{ t.deadline or '-' }}</small></td>
+          <td>
+            {% if t.status in ['completed','cancelled'] %}
+              <small class="text-success">已结束</small>
+            {% elif t.is_overdue %}
+              <small class="text-danger fw-bold">超时{{ t.overdue_hours }}h</small>
+            {% else %}
+              <small class="text-info">剩{{ t.remaining_hours }}h</small>
+            {% endif %}
+          </td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary" onclick="viewTask({{ t.id }})"><i class="bi bi-eye"></i> 详情</button>
+            {% if can_assign and t.status == 'pending' %}
+            <button class="btn btn-sm btn-outline-success" onclick="assignTask({{ t.id }})"><i class="bi bi-person-plus"></i> 指派</button>
+            {% endif %}
+            {% if can_manage and t.status not in ['completed','cancelled'] %}
+            <button class="btn btn-sm btn-outline-success" onclick="completeTask({{ t.id }})"><i class="bi bi-check2"></i> 完成</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-secondary"><i class="bi bi-inbox" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">暂无督办任务</div></div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function viewTask(id) {
+  fetch('/api/supervision?id=' + id)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.task) {
+        var t = data.task;
+        var statusLabels = {'pending':'待处理','in_progress':'处理中','completed':'已完成','cancelled':'已取消'};
+        var priorityLabels = {'urgent':'紧急','high':'高','normal':'普通','low':'低'};
+        
+        var logsHtml = '';
+        if (t.logs && t.logs.length > 0) {
+          logsHtml = '<div class="mt-3"><h6 class="mb-2"><i class="bi bi-clock-history"></i> 操作日志</h6>';
+          t.logs.forEach(function(log) {
+            logsHtml += '<div class="border-start border-3 border-primary ps-3 py-2 mb-2">';
+            logsHtml += '<div class="small text-secondary">' + (log.created_at || '') + ' · ' + (log.operator_name || '系统') + '</div>';
+            logsHtml += '<div style="font-size:13px;">';
+            if (log.old_status && log.new_status) {
+              logsHtml += '<span class="text-secondary">' + (log.old_status || '') + '</span> → <span class="text-primary">' + (log.new_status || '') + '</span> ';
+            }
+            logsHtml += log.remark || '';
+            logsHtml += '</div></div>';
+          });
+          logsHtml += '</div>';
+        }
+        
+        var html = '<div class="row g-2 mb-3">' +
+          '<div class="col-6"><small class="text-secondary">任务编号</small><div style="font-weight:600;">' + t.task_no + '</div></div>' +
+          '<div class="col-6"><small class="text-secondary">优先级</small><div>' + (priorityLabels[t.priority] || t.priority) + '</div></div>' +
+          '<div class="col-12"><small class="text-secondary">任务标题</small><div style="font-weight:600;font-size:16px;">' + t.title + '</div></div>' +
+          '<div class="col-12"><small class="text-secondary">描述</small><div>' + (t.description || '-') + '</div></div>' +
+          '<div class="col-6"><small class="text-secondary">状态</small><div>' + (statusLabels[t.status] || t.status) + '</div></div>' +
+          '<div class="col-6"><small class="text-secondary">截止时间</small><div>' + (t.deadline || '-') + '</div></div>' +
+          '<div class="col-6"><small class="text-secondary">指派给</small><div>' + (t.assigned_to_name || '未指派') + '</div></div>' +
+          '<div class="col-6"><small class="text-secondary">创建人</small><div>' + (t.assigned_by_name || '系统') + '</div></div>' +
+          '</div>' + logsHtml;
+        
+        openModal('任务详情 - ' + t.task_no, html, 'lg');
+      }
+    });
+}
+
+function assignTask(id) {
+  var users = {{ users|tojson }};
+  var optionsHtml = '<option value="">请选择处理人</option>';
+  users.forEach(function(u) {
+    optionsHtml += '<option value="' + u.id + '">' + u.real_name + ' (' + u.username + ')</option>';
+  });
+  
+  var html = '<div class="mb-3"><label class="form-label">指派给</label><select id="assignUser" class="form-select">' + optionsHtml + '</select></div>' +
+    '<div class="mb-3"><label class="form-label">备注</label><textarea id="assignRemark" class="form-control" rows="3" placeholder="可选"></textarea></div>' +
+    '<div class="text-end"><button class="btn btn-primary-bs" onclick="doAssign(' + id + ')">确认指派</button></div>';
+  
+  openModal('指派任务', html);
+}
+
+function doAssign(id) {
+  var userId = document.getElementById('assignUser').value;
+  var remark = document.getElementById('assignRemark').value;
+  if (!userId) { toastMsg('请选择处理人', 'error'); return; }
+  
+  fetch('/api/supervision/assign', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({task_id: id, assigned_to: userId, remark: remark})
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { toastMsg('指派成功'); setTimeout(function(){ location.reload(); }, 800); }
+      else { toastMsg(d.error || '操作失败', 'error'); }
+    });
+}
+
+function completeTask(id) {
+  if (!confirmAction('确认标记为已完成？')) return;
+  fetch('/api/supervision/status', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({task_id: id, status: 'completed'})
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { toastMsg('操作成功'); setTimeout(function(){ location.reload(); }, 800); }
+      else { toastMsg(d.error || '操作失败', 'error'); }
+    });
+}
+
+function openCreateModal() {
+  var priorities = [['urgent','紧急'],['high','高'],['normal','普通']];
+  var types = [
+    ['followup_general','回访一般'],
+    ['followup_important','回访重要'],
+    ['followup_critical','回访紧急'],
+    ['risk_warning','风险预警'],
+    ['checkin_anomaly','签到异常'],
+    ['noshow_intervention','失约干预'],
+    ['other','其他']
+  ];
+  var prioHtml = '';
+  priorities.forEach(function(p) { prioHtml += '<option value="' + p[0] + '">' + p[1] + '</option>'; });
+  var typeHtml = '';
+  types.forEach(function(t) { typeHtml += '<option value="' + t[0] + '">' + t[1] + '</option>'; });
+  
+  var html = '<div class="row g-2 mb-2">' +
+    '<div class="col-6"><label class="form-label small">任务类型</label><select id="taskType" class="form-select form-select-sm">' + typeHtml + '</select></div>' +
+    '<div class="col-6"><label class="form-label small">优先级</label><select id="taskPriority" class="form-select form-select-sm">' + prioHtml + '</select></div>' +
+    '</div>' +
+    '<div class="mb-2"><label class="form-label small">任务标题</label><input type="text" id="taskTitle" class="form-control form-control-sm" placeholder="请输入任务标题"></div>' +
+    '<div class="mb-2"><label class="form-label small">任务描述</label><textarea id="taskDesc" class="form-control form-control-sm" rows="3" placeholder="请输入任务描述"></textarea></div>' +
+    '<div class="row g-2 mb-2">' +
+    '<div class="col-6"><label class="form-label small">匿名编码（可选）</label><input type="text" id="taskCode" class="form-control form-control-sm"></div>' +
+    '<div class="col-6"><label class="form-label small">时限（小时）</label><input type="number" id="taskDeadline" class="form-control form-control-sm" value="48" min="1"></div>' +
+    '</div>' +
+    '<div class="text-end"><button class="btn btn-primary-bs btn-sm" onclick="doCreate()">创建任务</button></div>';
+  
+  openModal('新建督办任务', html, 'md');
+}
+
+function doCreate() {
+  var data = {
+    task_type: document.getElementById('taskType').value,
+    priority: document.getElementById('taskPriority').value,
+    title: document.getElementById('taskTitle').value,
+    description: document.getElementById('taskDesc').value,
+    anonymous_code: document.getElementById('taskCode').value,
+    deadline_hours: document.getElementById('taskDeadline').value
+  };
+  if (!data.title) { toastMsg('请输入任务标题', 'error'); return; }
+  
+  fetch('/api/supervision', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { toastMsg('创建成功'); setTimeout(function(){ location.reload(); }, 800); }
+      else { toastMsg(d.error || '创建失败', 'error'); }
+    });
+}
+</script>
+{% endblock %}

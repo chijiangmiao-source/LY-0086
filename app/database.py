@@ -217,6 +217,131 @@ def init_db():
         FOREIGN KEY (related_appointment_id) REFERENCES appointments(id) ON DELETE SET NULL
     )''')
 
+    c.execute('''CREATE TABLE IF NOT EXISTS supervision_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_no TEXT UNIQUE NOT NULL,
+        task_type TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'normal',
+        title TEXT NOT NULL,
+        description TEXT,
+        anonymous_user_id INTEGER,
+        anonymous_code TEXT,
+        appointment_id INTEGER,
+        followup_survey_id INTEGER,
+        risk_warning_id INTEGER,
+        assigned_to INTEGER,
+        assigned_by INTEGER,
+        status TEXT NOT NULL DEFAULT 'pending',
+        deadline TIMESTAMP,
+        completed_at TIMESTAMP,
+        completion_note TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (anonymous_user_id) REFERENCES anonymous_users(id),
+        FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL,
+        FOREIGN KEY (followup_survey_id) REFERENCES followup_surveys(id) ON DELETE SET NULL,
+        FOREIGN KEY (risk_warning_id) REFERENCES risk_warnings(id) ON DELETE SET NULL,
+        FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS supervision_task_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        operator_id INTEGER,
+        action_type TEXT NOT NULL,
+        remark TEXT,
+        old_status TEXT,
+        new_status TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (task_id) REFERENCES supervision_tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS intervention_archives (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        archive_no TEXT UNIQUE NOT NULL,
+        anonymous_user_id INTEGER,
+        anonymous_code TEXT,
+        appointment_id INTEGER,
+        risk_warning_id INTEGER,
+        supervision_task_id INTEGER,
+        counselor_id INTEGER,
+        intervention_type TEXT NOT NULL,
+        intervention_level TEXT,
+        intervention_methods TEXT,
+        intervention_content TEXT,
+        intervention_effect TEXT,
+        follow_up_plan TEXT,
+        is_closed INTEGER DEFAULT 0,
+        closed_by INTEGER,
+        closed_at TIMESTAMP,
+        closing_remark TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (anonymous_user_id) REFERENCES anonymous_users(id),
+        FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL,
+        FOREIGN KEY (risk_warning_id) REFERENCES risk_warnings(id) ON DELETE SET NULL,
+        FOREIGN KEY (supervision_task_id) REFERENCES supervision_tasks(id) ON DELETE SET NULL,
+        FOREIGN KEY (counselor_id) REFERENCES counselors(id) ON DELETE SET NULL,
+        FOREIGN KEY (closed_by) REFERENCES users(id) ON DELETE SET NULL
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS high_risk_tracking (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tracking_no TEXT UNIQUE NOT NULL,
+        anonymous_user_id INTEGER NOT NULL,
+        anonymous_code TEXT NOT NULL,
+        risk_level TEXT NOT NULL DEFAULT 'high',
+        initial_risk_reason TEXT,
+        current_status TEXT NOT NULL DEFAULT 'monitoring',
+        assigned_counselor_id INTEGER,
+        assigned_supervisor_id INTEGER,
+        next_followup_date DATE,
+        last_followup_date DATE,
+        followup_count INTEGER DEFAULT 0,
+        is_closed INTEGER DEFAULT 0,
+        closed_by INTEGER,
+        closed_at TIMESTAMP,
+        closing_reason TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (anonymous_user_id) REFERENCES anonymous_users(id) ON DELETE CASCADE,
+        FOREIGN KEY (assigned_counselor_id) REFERENCES counselors(id) ON DELETE SET NULL,
+        FOREIGN KEY (assigned_supervisor_id) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (closed_by) REFERENCES users(id) ON DELETE SET NULL
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS high_risk_tracking_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tracking_id INTEGER NOT NULL,
+        operator_id INTEGER,
+        log_type TEXT NOT NULL,
+        content TEXT,
+        mood_score INTEGER,
+        risk_assessment TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (tracking_id) REFERENCES high_risk_tracking(id) ON DELETE CASCADE,
+        FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS rebook_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        anonymous_user_id INTEGER NOT NULL,
+        anonymous_code TEXT NOT NULL,
+        first_appointment_id INTEGER,
+        first_counselor_id INTEGER,
+        rebook_appointment_id INTEGER,
+        rebook_counselor_id INTEGER,
+        days_between INTEGER,
+        rebook_reason TEXT,
+        is_same_counselor INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (anonymous_user_id) REFERENCES anonymous_users(id) ON DELETE CASCADE,
+        FOREIGN KEY (first_appointment_id) REFERENCES appointments(id) ON DELETE SET NULL,
+        FOREIGN KEY (rebook_appointment_id) REFERENCES appointments(id) ON DELETE SET NULL
+    )''')
+
     conn.commit()
     conn.close()
 
@@ -227,6 +352,14 @@ def init_db():
     _add_column_if_not_exists('appointments', 'abnormal_reason TEXT')
     _add_column_if_not_exists('appointments', 'reminder_sent INTEGER DEFAULT 0')
     _add_column_if_not_exists('appointments', 'schedule_id INTEGER')
+
+    _add_column_if_not_exists('followup_surveys', 'abnormal_grade TEXT DEFAULT \'normal\'')
+    _add_column_if_not_exists('followup_surveys', 'abnormal_grade_reason TEXT')
+    _add_column_if_not_exists('followup_surveys', 'priority_level TEXT DEFAULT \'normal\'')
+
+    _add_column_if_not_exists('supervision_tasks', 'last_reminder_sent TIMESTAMP')
+
+    _add_column_if_not_exists('notifications', 'related_supervision_task_id INTEGER')
 
     conn = get_conn()
     c = conn.cursor()
@@ -246,6 +379,25 @@ def init_db():
     c.execute('''CREATE INDEX IF NOT EXISTS idx_followup_highrisk ON followup_surveys(is_high_risk)''')
     c.execute('''CREATE INDEX IF NOT EXISTS idx_followup_score ON followup_surveys(satisfaction_score)''')
     c.execute('''CREATE INDEX IF NOT EXISTS idx_followup_created ON followup_surveys(created_at)''')
+
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_supervision_status ON supervision_tasks(status)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_supervision_priority ON supervision_tasks(priority)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_supervision_assigned ON supervision_tasks(assigned_to, status)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_supervision_deadline ON supervision_tasks(deadline)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_supervision_anonymous ON supervision_tasks(anonymous_user_id)''')
+
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_archive_closed ON intervention_archives(is_closed)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_archive_anonymous ON intervention_archives(anonymous_user_id)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_archive_created ON intervention_archives(created_at)''')
+
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_hirt_status ON high_risk_tracking(current_status)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_hirt_anonymous ON high_risk_tracking(anonymous_user_id)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_hirt_closed ON high_risk_tracking(is_closed)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_hirt_followup ON high_risk_tracking(next_followup_date)''')
+
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_rebook_anonymous ON rebook_records(anonymous_user_id)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_rebook_counselor ON rebook_records(first_counselor_id)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_rebook_created ON rebook_records(created_at)''')
 
     admin_pw = hashlib.sha256('admin123'.encode()).hexdigest()
     staff_pw = hashlib.sha256('staff123'.encode()).hexdigest()
@@ -275,6 +427,10 @@ def init_db():
             'manage_users', 'manage_permissions',
             'view_notifications',
             'view_followup', 'manage_followup', 'view_followup_analytics',
+            'view_supervision', 'manage_supervision', 'assign_supervision',
+            'view_intervention_archives', 'manage_intervention_archives',
+            'view_high_risk_tracking', 'manage_high_risk_tracking',
+            'view_quality_comparison', 'view_rebook_analysis',
         ],
         'staff': [
             'view_dashboard',
@@ -286,6 +442,8 @@ def init_db():
             'view_risk_warnings',
             'view_notifications',
             'view_followup', 'view_followup_analytics',
+            'view_supervision',
+            'view_quality_comparison', 'view_rebook_analysis',
         ],
         'intervention': [
             'view_dashboard',
@@ -295,6 +453,10 @@ def init_db():
             'view_risk_warnings', 'manage_risk_warnings',
             'view_notifications',
             'view_followup', 'manage_followup', 'view_followup_analytics',
+            'view_supervision', 'manage_supervision',
+            'view_intervention_archives', 'manage_intervention_archives',
+            'view_high_risk_tracking', 'manage_high_risk_tracking',
+            'view_quality_comparison', 'view_rebook_analysis',
         ],
         'counselor': [
             'view_dashboard',
@@ -302,6 +464,7 @@ def init_db():
             'view_appointments',
             'view_notifications',
             'view_followup', 'view_followup_analytics',
+            'view_quality_comparison',
         ],
     }
 
@@ -1533,3 +1696,1030 @@ def get_followup_summary_stats(start_date=None, end_date=None):
                  'high_risk_rate': 0, 'rebook_rate': 0}
 
     return stats, score_dist
+
+def generate_task_no():
+    now = datetime.now()
+    return 'TSK' + now.strftime('%Y%m%d%H%M%S') + str(now.microsecond // 1000).zfill(3)
+
+def generate_archive_no():
+    now = datetime.now()
+    return 'ARC' + now.strftime('%Y%m%d%H%M%S') + str(now.microsecond // 1000).zfill(3)
+
+def generate_tracking_no():
+    now = datetime.now()
+    return 'TRK' + now.strftime('%Y%m%d%H%M%S') + str(now.microsecond // 1000).zfill(3)
+
+def grade_followup_abnormal(survey_id):
+    from config import (FOLLOWUP_GRADE_HIGH_SCORE, FOLLOWUP_GRADE_MEDIUM_SCORE,
+                        FOLLOWUP_GRADE_KEYWORDS_MEDIUM, FOLLOWUP_GRADE_KEYWORDS_HIGH)
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM followup_surveys WHERE id = ?", (survey_id,))
+    survey = dict_row(c.fetchone())
+    if not survey:
+        conn.close()
+        return None
+
+    grade = 'normal'
+    reasons = []
+    priority = 'normal'
+
+    score = survey.get('satisfaction_score')
+    if score is not None:
+        if score <= FOLLOWUP_GRADE_HIGH_SCORE:
+            grade = 'critical'
+            reasons.append(f'满意度极低({score}分)')
+            priority = 'urgent'
+        elif score <= FOLLOWUP_GRADE_MEDIUM_SCORE:
+            grade = 'important'
+            reasons.append(f'满意度偏低({score}分)')
+            priority = 'high'
+
+    comment = survey.get('comment') or ''
+    responses = survey.get('responses') or ''
+
+    if isinstance(responses, str):
+        try:
+            responses = json.loads(responses)
+        except (json.JSONDecodeError, TypeError):
+            responses = {}
+
+    all_text = comment
+    if isinstance(responses, dict):
+        for v in responses.values():
+            all_text += ' ' + str(v)
+
+    for kw in FOLLOWUP_GRADE_KEYWORDS_HIGH:
+        if kw in all_text:
+            if grade != 'critical':
+                grade = 'critical'
+                priority = 'urgent'
+            reasons.append(f'含高风险关键词：{kw}')
+            break
+
+    if grade != 'critical':
+        for kw in FOLLOWUP_GRADE_KEYWORDS_MEDIUM:
+            if kw in all_text:
+                if grade == 'normal':
+                    grade = 'important'
+                    priority = 'high'
+                reasons.append(f'含关注关键词：{kw}')
+
+    if survey.get('is_high_risk'):
+        grade = 'critical'
+        priority = 'urgent'
+        if not reasons:
+            reasons.append('系统标记为高风险')
+
+    if survey.get('is_abnormal') and grade == 'normal':
+        grade = 'general'
+        priority = 'normal'
+        reasons.append('回访异常反馈')
+
+    if survey.get('rebook_willingness') == 'no' and grade == 'normal':
+        grade = 'general'
+        reasons.append('明确表示不复约')
+
+    c.execute("""UPDATE followup_surveys 
+                 SET abnormal_grade = ?, abnormal_grade_reason = ?, priority_level = ?
+                 WHERE id = ?""",
+              (grade, '；'.join(reasons) if reasons else None, priority, survey_id))
+    conn.commit()
+    conn.close()
+
+    return {'grade': grade, 'reasons': reasons, 'priority': priority}
+
+def create_supervision_task(task_type, priority, title, description='',
+                            anonymous_user_id=None, anonymous_code=None,
+                            appointment_id=None, followup_survey_id=None,
+                            risk_warning_id=None, assigned_to=None, assigned_by=None,
+                            deadline_hours=None):
+    from config import (SUPERVISION_URGENT_HOURS, SUPERVISION_HIGH_HOURS, SUPERVISION_NORMAL_HOURS)
+    conn = get_conn()
+    c = conn.cursor()
+
+    task_no = generate_task_no()
+
+    if deadline_hours is None:
+        if priority == 'urgent':
+            deadline_hours = SUPERVISION_URGENT_HOURS
+        elif priority == 'high':
+            deadline_hours = SUPERVISION_HIGH_HOURS
+        else:
+            deadline_hours = SUPERVISION_NORMAL_HOURS
+
+    deadline = (datetime.now() + timedelta(hours=deadline_hours)).strftime('%Y-%m-%d %H:%M:%S')
+
+    c.execute("""INSERT INTO supervision_tasks
+                 (task_no, task_type, priority, title, description,
+                  anonymous_user_id, anonymous_code,
+                  appointment_id, followup_survey_id, risk_warning_id,
+                  assigned_to, assigned_by, status, deadline)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+              (task_no, task_type, priority, title, description,
+               anonymous_user_id, anonymous_code,
+               appointment_id, followup_survey_id, risk_warning_id,
+               assigned_to, assigned_by, 'pending', deadline))
+    task_id = c.lastrowid
+
+    c.execute("""INSERT INTO supervision_task_logs
+                 (task_id, operator_id, action_type, remark, old_status, new_status)
+                 VALUES (?,?,?,?,?,?)""",
+              (task_id, assigned_by, 'create', description, None, 'pending'))
+
+    if assigned_to:
+        c.execute("""INSERT INTO notifications (user_id, notification_type, title, content, related_appointment_id)
+                     VALUES (?, 'supervision', ?, ?, ?)""",
+                  (assigned_to, f'新督办任务：{title}',
+                   f'您有一个新的督办任务，请及时处理。任务编号：{task_no}', appointment_id))
+
+    conn.commit()
+    conn.close()
+    return task_id, task_no
+
+def get_supervision_tasks(filters=None, limit=100):
+    conn = get_conn()
+    c = conn.cursor()
+    query = """SELECT st.*, 
+                      u_assign.real_name as assigned_to_name,
+                      u_assign.username as assigned_to_username,
+                      u_by.real_name as assigned_by_name,
+                      a.appointment_no,
+                      cou.name as counselor_name
+               FROM supervision_tasks st
+               LEFT JOIN users u_assign ON st.assigned_to = u_assign.id
+               LEFT JOIN users u_by ON st.assigned_by = u_by.id
+               LEFT JOIN appointments a ON st.appointment_id = a.id
+               LEFT JOIN counselors cou ON a.counselor_id = cou.id
+               WHERE 1=1"""
+    params = []
+    if filters:
+        if filters.get('status'):
+            query += " AND st.status = ?"
+            params.append(filters['status'])
+        if filters.get('priority'):
+            query += " AND st.priority = ?"
+            params.append(filters['priority'])
+        if filters.get('assigned_to'):
+            query += " AND st.assigned_to = ?"
+            params.append(filters['assigned_to'])
+        if filters.get('task_type'):
+            query += " AND st.task_type = ?"
+            params.append(filters['task_type'])
+        if filters.get('anonymous_code'):
+            query += " AND st.anonymous_code LIKE ?"
+            params.append(f"%{filters['anonymous_code']}%")
+        if filters.get('is_overdue') and filters['is_overdue'] == '1':
+            query += " AND st.deadline < ? AND st.status NOT IN ('completed', 'cancelled')"
+            params.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    query += """ ORDER BY 
+                    CASE st.priority 
+                        WHEN 'urgent' THEN 1 
+                        WHEN 'high' THEN 2 
+                        WHEN 'normal' THEN 3 
+                        ELSE 4 
+                    END,
+                    st.deadline ASC,
+                    st.created_at DESC
+                 LIMIT ?"""
+    params.append(limit)
+    c.execute(query, params)
+    tasks = dict_rows(c.fetchall())
+
+    now = datetime.now()
+    for t in tasks:
+        if t.get('deadline') and t.get('status') not in ('completed', 'cancelled'):
+            try:
+                deadline_dt = datetime.strptime(t['deadline'], '%Y-%m-%d %H:%M:%S')
+                remaining = deadline_dt - now
+                t['remaining_hours'] = round(remaining.total_seconds() / 3600, 1)
+                t['is_overdue'] = remaining.total_seconds() < 0
+                t['overdue_hours'] = round(abs(remaining.total_seconds()) / 3600, 1) if t['is_overdue'] else 0
+            except (ValueError, TypeError):
+                t['remaining_hours'] = None
+                t['is_overdue'] = False
+                t['overdue_hours'] = 0
+        else:
+            t['remaining_hours'] = None
+            t['is_overdue'] = False
+            t['overdue_hours'] = 0
+
+        if t.get('anonymous_code') and len(t['anonymous_code']) > 6:
+            t['masked_code'] = t['anonymous_code'][:4] + '***' + t['anonymous_code'][-2:]
+        else:
+            t['masked_code'] = t['anonymous_code'][:3] + '***' if t.get('anonymous_code') else '***'
+
+    conn.close()
+    return tasks
+
+def get_supervision_task(task_id):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""SELECT st.*,
+                        u_assign.real_name as assigned_to_name,
+                        u_assign.username as assigned_to_username,
+                        u_by.real_name as assigned_by_name,
+                        a.appointment_no, a.appointment_date, a.start_time, a.end_time,
+                        cou.name as counselor_name,
+                        fs.satisfaction_score, fs.rebook_willingness,
+                        rw.risk_level as warning_level
+                 FROM supervision_tasks st
+                 LEFT JOIN users u_assign ON st.assigned_to = u_assign.id
+                 LEFT JOIN users u_by ON st.assigned_by = u_by.id
+                 LEFT JOIN appointments a ON st.appointment_id = a.id
+                 LEFT JOIN counselors cou ON a.counselor_id = cou.id
+                 LEFT JOIN followup_surveys fs ON st.followup_survey_id = fs.id
+                 LEFT JOIN risk_warnings rw ON st.risk_warning_id = rw.id
+                 WHERE st.id = ?""", (task_id,))
+    task = dict_row(c.fetchone())
+
+    if task:
+        c.execute("""SELECT stl.*, u.real_name as operator_name
+                     FROM supervision_task_logs stl
+                     LEFT JOIN users u ON stl.operator_id = u.id
+                     WHERE stl.task_id = ?
+                     ORDER BY stl.created_at ASC""", (task_id,))
+        task['logs'] = dict_rows(c.fetchall())
+
+    conn.close()
+    return task
+
+def update_supervision_task_status(task_id, new_status, operator_id=None, remark=''):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM supervision_tasks WHERE id = ?", (task_id,))
+    task = dict_row(c.fetchone())
+    if not task:
+        conn.close()
+        return False
+
+    old_status = task['status']
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    updates = ["status = ?", "updated_at = ?"]
+    params = [new_status, now, task_id]
+
+    if new_status == 'completed':
+        updates.append("completed_at = ?")
+        params.insert(-1, now)
+
+    c.execute(f"UPDATE supervision_tasks SET {', '.join(updates)} WHERE id = ?", params)
+
+    c.execute("""INSERT INTO supervision_task_logs
+                 (task_id, operator_id, action_type, remark, old_status, new_status)
+                 VALUES (?,?,?,?,?,?)""",
+              (task_id, operator_id, 'status_change', remark, old_status, new_status))
+
+    if task.get('assigned_to'):
+        c.execute("""INSERT INTO notifications (user_id, notification_type, title, content)
+                     VALUES (?, 'supervision', ?, ?)""",
+                  (task['assigned_to'], f'督办任务状态更新：{task["title"]}',
+                   f'任务状态从{old_status}变更为{new_status}。任务编号：{task["task_no"]}'))
+
+    conn.commit()
+    conn.close()
+    return True
+
+def assign_supervision_task(task_id, assigned_to, assigned_by=None, remark=''):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM supervision_tasks WHERE id = ?", (task_id,))
+    task = dict_row(c.fetchone())
+    if not task:
+        conn.close()
+        return False
+
+    old_assignee = task['assigned_to']
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    c.execute("""UPDATE supervision_tasks 
+                 SET assigned_to = ?, assigned_by = ?, status = 'in_progress', updated_at = ?
+                 WHERE id = ?""",
+              (assigned_to, assigned_by, now, task_id))
+
+    c.execute("""INSERT INTO supervision_task_logs
+                 (task_id, operator_id, action_type, remark, old_status, new_status)
+                 VALUES (?,?,?,?,?,?)""",
+              (task_id, assigned_by, 'assign', remark, task['status'], 'in_progress'))
+
+    c.execute("""INSERT INTO notifications (user_id, notification_type, title, content)
+                 VALUES (?, 'supervision', ?, ?)""",
+              (assigned_to, f'您被指派了新的督办任务',
+               f'任务：{task["title"]}\n任务编号：{task["task_no"]}'))
+
+    conn.commit()
+    conn.close()
+    return True
+
+def get_supervision_summary(user_id=None):
+    conn = get_conn()
+    c = conn.cursor()
+
+    params = []
+    user_clause = ''
+    if user_id:
+        user_clause = ' AND assigned_to = ?'
+        params.append(user_id)
+
+    c.execute(f"""SELECT 
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                    SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+                    SUM(CASE WHEN priority = 'urgent' AND status NOT IN ('completed','cancelled') THEN 1 ELSE 0 END) as urgent_count,
+                    SUM(CASE WHEN priority = 'high' AND status NOT IN ('completed','cancelled') THEN 1 ELSE 0 END) as high_count,
+                    SUM(CASE WHEN deadline < ? AND status NOT IN ('completed','cancelled') THEN 1 ELSE 0 END) as overdue
+                  FROM supervision_tasks WHERE 1=1{user_clause}""",
+              [datetime.now().strftime('%Y-%m-%d %H:%M:%S')] + params)
+    summary = dict_row(c.fetchone())
+    conn.close()
+    
+    if summary:
+        for key in ['total', 'pending', 'in_progress', 'completed', 'cancelled', 'urgent_count', 'high_count', 'overdue']:
+            if summary.get(key) is None:
+                summary[key] = 0
+    
+    return summary if summary else {'total': 0, 'pending': 0, 'in_progress': 0, 'completed': 0, 'cancelled': 0, 'urgent_count': 0, 'high_count': 0, 'overdue': 0}
+
+def create_intervention_archive(anonymous_user_id, anonymous_code, intervention_type,
+                                intervention_level=None, intervention_methods=None,
+                                intervention_content=None, intervention_effect=None,
+                                follow_up_plan=None, appointment_id=None,
+                                risk_warning_id=None, supervision_task_id=None,
+                                counselor_id=None):
+    import json
+    conn = get_conn()
+    c = conn.cursor()
+
+    archive_no = generate_archive_no()
+
+    methods_json = json.dumps(intervention_methods, ensure_ascii=False) if isinstance(intervention_methods, (list, dict)) else intervention_methods
+
+    c.execute("""INSERT INTO intervention_archives
+                 (archive_no, anonymous_user_id, anonymous_code, appointment_id,
+                  risk_warning_id, supervision_task_id, counselor_id,
+                  intervention_type, intervention_level, intervention_methods,
+                  intervention_content, intervention_effect, follow_up_plan)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+              (archive_no, anonymous_user_id, anonymous_code, appointment_id,
+               risk_warning_id, supervision_task_id, counselor_id,
+               intervention_type, intervention_level, methods_json,
+               intervention_content, intervention_effect, follow_up_plan))
+    archive_id = c.lastrowid
+
+    if supervision_task_id:
+        c.execute("""UPDATE supervision_tasks 
+                     SET status = 'completed', completed_at = ?, updated_at = ?
+                     WHERE id = ?""",
+                  (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                   datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                   supervision_task_id))
+
+    conn.commit()
+    conn.close()
+    return archive_id, archive_no
+
+def get_intervention_archives(filters=None, limit=100):
+    import json
+    conn = get_conn()
+    c = conn.cursor()
+    query = """SELECT ia.*, cou.name as counselor_name,
+                      a.appointment_no, a.appointment_date
+               FROM intervention_archives ia
+               LEFT JOIN counselors cou ON ia.counselor_id = cou.id
+               LEFT JOIN appointments a ON ia.appointment_id = a.id
+               WHERE 1=1"""
+    params = []
+    if filters:
+        if filters.get('is_closed') is not None:
+            query += " AND ia.is_closed = ?"
+            params.append(filters['is_closed'])
+        if filters.get('intervention_type'):
+            query += " AND ia.intervention_type = ?"
+            params.append(filters['intervention_type'])
+        if filters.get('intervention_level'):
+            query += " AND ia.intervention_level = ?"
+            params.append(filters['intervention_level'])
+        if filters.get('anonymous_code'):
+            query += " AND ia.anonymous_code LIKE ?"
+            params.append(f"%{filters['anonymous_code']}%")
+        if filters.get('date_from'):
+            query += " AND date(ia.created_at) >= ?"
+            params.append(filters['date_from'])
+        if filters.get('date_to'):
+            query += " AND date(ia.created_at) <= ?"
+            params.append(filters['date_to'])
+    query += " ORDER BY ia.created_at DESC LIMIT ?"
+    params.append(limit)
+    c.execute(query, params)
+    archives = dict_rows(c.fetchall())
+
+    for a in archives:
+        if a.get('intervention_methods'):
+            try:
+                a['parsed_methods'] = json.loads(a['intervention_methods'])
+            except (json.JSONDecodeError, TypeError):
+                a['parsed_methods'] = []
+        else:
+            a['parsed_methods'] = []
+
+        if a.get('anonymous_code') and len(a['anonymous_code']) > 6:
+            a['masked_code'] = a['anonymous_code'][:4] + '***' + a['anonymous_code'][-2:]
+        else:
+            a['masked_code'] = a['anonymous_code'][:3] + '***' if a.get('anonymous_code') else '***'
+
+    conn.close()
+    return archives
+
+def get_intervention_archive(archive_id):
+    import json
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""SELECT ia.*, cou.name as counselor_name,
+                        a.appointment_no, a.appointment_date, a.start_time, a.end_time,
+                        st.task_no as supervision_task_no,
+                        rw.warning_type as risk_warning_type
+                 FROM intervention_archives ia
+                 LEFT JOIN counselors cou ON ia.counselor_id = cou.id
+                 LEFT JOIN appointments a ON ia.appointment_id = a.id
+                 LEFT JOIN supervision_tasks st ON ia.supervision_task_id = st.id
+                 LEFT JOIN risk_warnings rw ON ia.risk_warning_id = rw.id
+                 WHERE ia.id = ?""", (archive_id,))
+    archive = dict_row(c.fetchone())
+
+    if archive and archive.get('intervention_methods'):
+        try:
+            archive['parsed_methods'] = json.loads(archive['intervention_methods'])
+        except (json.JSONDecodeError, TypeError):
+            archive['parsed_methods'] = []
+
+    conn.close()
+    return archive
+
+def close_intervention_archive(archive_id, closed_by, closing_remark=''):
+    conn = get_conn()
+    c = conn.cursor()
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    c.execute("""UPDATE intervention_archives 
+                 SET is_closed = 1, closed_by = ?, closed_at = ?, closing_remark = ?, updated_at = ?
+                 WHERE id = ?""",
+              (closed_by, now, closing_remark, now, archive_id))
+    conn.commit()
+    conn.close()
+    return True
+
+def create_high_risk_tracking(anonymous_user_id, anonymous_code, initial_risk_reason='',
+                              assigned_counselor_id=None, assigned_supervisor_id=None):
+    from config import HIGH_RISK_FOLLOWUP_INTERVAL_DAYS
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("SELECT id FROM high_risk_tracking WHERE anonymous_user_id = ? AND is_closed = 0", (anonymous_user_id,))
+    existing = c.fetchone()
+    if existing:
+        conn.close()
+        return existing['id'], None
+
+    tracking_no = generate_tracking_no()
+    next_followup = (date.today() + timedelta(days=HIGH_RISK_FOLLOWUP_INTERVAL_DAYS)).isoformat()
+
+    c.execute("""INSERT INTO high_risk_tracking
+                 (tracking_no, anonymous_user_id, anonymous_code, risk_level,
+                  initial_risk_reason, current_status, assigned_counselor_id,
+                  assigned_supervisor_id, next_followup_date)
+                 VALUES (?,?,?,?,?,?,?,?,?)""",
+              (tracking_no, anonymous_user_id, anonymous_code, 'high',
+               initial_risk_reason, 'monitoring', assigned_counselor_id,
+               assigned_supervisor_id, next_followup))
+    tracking_id = c.lastrowid
+
+    c.execute("""INSERT INTO high_risk_tracking_logs
+                 (tracking_id, operator_id, log_type, content, risk_assessment)
+                 VALUES (?,?,?,?,?)""",
+              (tracking_id, assigned_supervisor_id, 'init',
+               f'建立高风险跟踪台账。原因：{initial_risk_reason}', 'high'))
+
+    conn.commit()
+    conn.close()
+    return tracking_id, tracking_no
+
+def get_high_risk_trackings(filters=None, limit=100):
+    conn = get_conn()
+    c = conn.cursor()
+    query = """SELECT hrt.*, 
+                      cou.name as counselor_name,
+                      u.real_name as supervisor_name,
+                      au.no_show_count, au.risk_level as user_risk_level
+               FROM high_risk_tracking hrt
+               LEFT JOIN counselors cou ON hrt.assigned_counselor_id = cou.id
+               LEFT JOIN users u ON hrt.assigned_supervisor_id = u.id
+               LEFT JOIN anonymous_users au ON hrt.anonymous_user_id = au.id
+               WHERE 1=1"""
+    params = []
+    if filters:
+        if filters.get('is_closed') is not None:
+            query += " AND hrt.is_closed = ?"
+            params.append(filters['is_closed'])
+        if filters.get('current_status'):
+            query += " AND hrt.current_status = ?"
+            params.append(filters['current_status'])
+        if filters.get('risk_level'):
+            query += " AND hrt.risk_level = ?"
+            params.append(filters['risk_level'])
+        if filters.get('anonymous_code'):
+            query += " AND hrt.anonymous_code LIKE ?"
+            params.append(f"%{filters['anonymous_code']}%")
+    query += """ ORDER BY 
+                    CASE hrt.risk_level 
+                        WHEN 'high' THEN 1 
+                        WHEN 'medium' THEN 2 
+                        ELSE 3 
+                    END,
+                    hrt.next_followup_date ASC,
+                    hrt.created_at DESC
+                 LIMIT ?"""
+    params.append(limit)
+    c.execute(query, params)
+    trackings = dict_rows(c.fetchall())
+
+    today = date.today()
+    for t in trackings:
+        if t.get('anonymous_code') and len(t['anonymous_code']) > 6:
+            t['masked_code'] = t['anonymous_code'][:4] + '***' + t['anonymous_code'][-2:]
+        else:
+            t['masked_code'] = t['anonymous_code'][:3] + '***' if t.get('anonymous_code') else '***'
+
+        if t.get('next_followup_date'):
+            try:
+                next_dt = datetime.strptime(t['next_followup_date'], '%Y-%m-%d').date()
+                days_until = (next_dt - today).days
+                t['days_until_followup'] = days_until
+                t['is_followup_due'] = days_until <= 0
+            except (ValueError, TypeError):
+                t['days_until_followup'] = None
+                t['is_followup_due'] = False
+
+    conn.close()
+    return trackings
+
+def get_high_risk_tracking(tracking_id):
+    import json
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""SELECT hrt.*,
+                        cou.name as counselor_name,
+                        u.real_name as supervisor_name,
+                        au.no_show_count, au.risk_level as user_risk_level,
+                        au.risk_reason as user_risk_reason
+                 FROM high_risk_tracking hrt
+                 LEFT JOIN counselors cou ON hrt.assigned_counselor_id = cou.id
+                 LEFT JOIN users u ON hrt.assigned_supervisor_id = u.id
+                 LEFT JOIN anonymous_users au ON hrt.anonymous_user_id = au.id
+                 WHERE hrt.id = ?""", (tracking_id,))
+    tracking = dict_row(c.fetchone())
+
+    if tracking:
+        c.execute("""SELECT hrtl.*, u.real_name as operator_name
+                     FROM high_risk_tracking_logs hrtl
+                     LEFT JOIN users u ON hrtl.operator_id = u.id
+                     WHERE hrtl.tracking_id = ?
+                     ORDER BY hrtl.created_at DESC
+                     LIMIT 50""", (tracking_id,))
+        tracking['logs'] = dict_rows(c.fetchall())
+
+        c.execute("""SELECT COUNT(*) as total_appts,
+                            SUM(CASE WHEN checkin_status = 'checked_in' THEN 1 ELSE 0 END) as checked,
+                            SUM(CASE WHEN no_show_marked = 1 THEN 1 ELSE 0 END) as noshow
+                     FROM appointments 
+                     WHERE anonymous_user_id = ?""",
+                  (tracking['anonymous_user_id'],))
+        appt_stats = dict_row(c.fetchone())
+        tracking['appt_stats'] = appt_stats if appt_stats else {'total_appts': 0, 'checked': 0, 'noshow': 0}
+
+        c.execute("""SELECT fs.*, a.appointment_date
+                     FROM followup_surveys fs
+                     LEFT JOIN appointments a ON fs.appointment_id = a.id
+                     WHERE fs.anonymous_user_id = ?
+                     ORDER BY fs.created_at DESC
+                     LIMIT 10""",
+                  (tracking['anonymous_user_id'],))
+        tracking['recent_followups'] = dict_rows(c.fetchall())
+
+    conn.close()
+    return tracking
+
+def add_high_risk_tracking_log(tracking_id, operator_id, log_type, content='',
+                               mood_score=None, risk_assessment=None):
+    from config import HIGH_RISK_FOLLOWUP_INTERVAL_DAYS
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("""INSERT INTO high_risk_tracking_logs
+                 (tracking_id, operator_id, log_type, content, mood_score, risk_assessment)
+                 VALUES (?,?,?,?,?,?)""",
+              (tracking_id, operator_id, log_type, content, mood_score, risk_assessment))
+
+    if log_type == 'followup':
+        c.execute("""UPDATE high_risk_tracking 
+                     SET followup_count = followup_count + 1,
+                         last_followup_date = ?,
+                         next_followup_date = ?,
+                         updated_at = ?
+                     WHERE id = ?""",
+                  (date.today().isoformat(),
+                   (date.today() + timedelta(days=HIGH_RISK_FOLLOWUP_INTERVAL_DAYS)).isoformat(),
+                   datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                   tracking_id))
+    else:
+        c.execute("UPDATE high_risk_tracking SET updated_at = ? WHERE id = ?",
+                  (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), tracking_id))
+
+    conn.commit()
+    conn.close()
+    return True
+
+def close_high_risk_tracking(tracking_id, closed_by, closing_reason=''):
+    conn = get_conn()
+    c = conn.cursor()
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    c.execute("""UPDATE high_risk_tracking 
+                 SET is_closed = 1, current_status = 'closed', closed_by = ?, 
+                     closed_at = ?, closing_reason = ?, updated_at = ?
+                 WHERE id = ?""",
+              (closed_by, now, closing_reason, now, tracking_id))
+
+    c.execute("""INSERT INTO high_risk_tracking_logs
+                 (tracking_id, operator_id, log_type, content, risk_assessment)
+                 VALUES (?,?,?,?,?)""",
+              (tracking_id, closed_by, 'close',
+               f'关闭跟踪台账。原因：{closing_reason}', 'low'))
+
+    conn.commit()
+    conn.close()
+    return True
+
+def get_high_risk_tracking_summary():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""SELECT 
+                    COUNT(*) as total,
+                    SUM(CASE WHEN is_closed = 0 AND current_status = 'monitoring' THEN 1 ELSE 0 END) as monitoring,
+                    SUM(CASE WHEN is_closed = 0 AND current_status = 'intervening' THEN 1 ELSE 0 END) as intervening,
+                    SUM(CASE WHEN is_closed = 1 THEN 1 ELSE 0 END) as closed,
+                    SUM(CASE WHEN risk_level = 'high' AND is_closed = 0 THEN 1 ELSE 0 END) as high_risk,
+                    SUM(CASE WHEN risk_level = 'medium' AND is_closed = 0 THEN 1 ELSE 0 END) as medium_risk,
+                    SUM(CASE WHEN next_followup_date <= ? AND is_closed = 0 THEN 1 ELSE 0 END) as followup_due
+                  FROM high_risk_tracking""",
+              (date.today().isoformat(),))
+    summary = dict_row(c.fetchone())
+    conn.close()
+    return summary if summary else {}
+
+def get_counselor_quality_comparison(start_date, end_date):
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("""SELECT 
+                    cou.id, cou.name, cou.title, cou.specialty,
+                    COUNT(DISTINCT a.id) as total_appointments,
+                    COUNT(DISTINCT CASE WHEN a.checkin_status = 'checked_in' THEN a.id END) as attended_appointments,
+                    COUNT(DISTINCT fs.id) as followup_count,
+                    AVG(fs.satisfaction_score) as avg_satisfaction,
+                    SUM(CASE WHEN fs.satisfaction_score = 5 THEN 1 ELSE 0 END) as score_5,
+                    SUM(CASE WHEN fs.satisfaction_score = 4 THEN 1 ELSE 0 END) as score_4,
+                    SUM(CASE WHEN fs.satisfaction_score = 3 THEN 1 ELSE 0 END) as score_3,
+                    SUM(CASE WHEN fs.satisfaction_score = 2 THEN 1 ELSE 0 END) as score_2,
+                    SUM(CASE WHEN fs.satisfaction_score = 1 THEN 1 ELSE 0 END) as score_1,
+                    SUM(CASE WHEN fs.rebook_willingness = 'yes' THEN 1 ELSE 0 END) as rebook_yes,
+                    SUM(CASE WHEN fs.is_abnormal = 1 THEN 1 ELSE 0 END) as abnormal_count,
+                    SUM(CASE WHEN fs.is_high_risk = 1 THEN 1 ELSE 0 END) as high_risk_count,
+                    COUNT(DISTINCT a.anonymous_user_id) as unique_clients
+                 FROM counselors cou
+                 LEFT JOIN appointments a ON cou.id = a.counselor_id
+                    AND date(a.appointment_date) BETWEEN ? AND ?
+                    AND a.checkin_status != 'cancelled'
+                 LEFT JOIN followup_surveys fs ON a.id = fs.appointment_id
+                 WHERE cou.is_active = 1
+                 GROUP BY cou.id
+                 ORDER BY avg_satisfaction DESC NULLS LAST, total_appointments DESC""",
+              (start_date, end_date))
+    counselors = dict_rows(c.fetchall())
+
+    for c_item in counselors:
+        total_appts = c_item['total_appointments'] or 0
+        attended = c_item['attended_appointments'] or 0
+        followups = c_item['followup_count'] or 0
+        
+        c_item['counselor_name'] = c_item.get('name') or '未知'
+        c_item['total_sessions'] = total_appts
+
+        c_item['attendance_rate'] = round(attended / total_appts * 100, 1) if total_appts > 0 else 0
+        c_item['avg_satisfaction'] = round(c_item['avg_satisfaction'], 2) if c_item.get('avg_satisfaction') else 0
+        c_item['satisfaction_rate'] = round((c_item['score_5'] + c_item['score_4']) / followups * 100, 1) if followups > 0 else 0
+        c_item['rebook_rate'] = round(c_item['rebook_yes'] / followups * 100, 1) if followups > 0 else 0
+        c_item['abnormal_rate'] = round(c_item['abnormal_count'] / followups * 100, 1) if followups > 0 else 0
+        c_item['avg_appts_per_client'] = round(total_appts / (c_item['unique_clients'] or 1), 1)
+
+    conn.close()
+    return counselors
+
+def get_rebook_analysis(start_date, end_date):
+    from config import REBOOK_ANALYSIS_DAYS
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("""SELECT 
+                    COUNT(DISTINCT au.id) as total_anonymous_users,
+                    COUNT(DISTINCT a.id) as total_appointments,
+                    SUM(CASE WHEN a.checkin_status = 'checked_in' THEN 1 ELSE 0 END) as attended_appointments
+                 FROM anonymous_users au
+                 LEFT JOIN appointments a ON au.id = a.anonymous_user_id
+                    AND date(a.appointment_date) BETWEEN ? AND ?
+                    AND a.checkin_status != 'cancelled'
+                 WHERE au.created_at <= ?""",
+              (start_date, end_date, end_date))
+    basic_stats = dict_row(c.fetchone())
+
+    c.execute("""SELECT 
+                    COUNT(DISTINCT au.id) as repeat_users,
+                    COUNT(*) as repeat_appointments
+                 FROM anonymous_users au
+                 JOIN appointments a1 ON au.id = a1.anonymous_user_id
+                 JOIN appointments a2 ON au.id = a2.anonymous_user_id AND a2.id > a1.id
+                 WHERE date(a1.appointment_date) BETWEEN ? AND ?
+                   AND date(a2.appointment_date) BETWEEN ? AND ?
+                   AND a1.checkin_status = 'checked_in'
+                   AND a2.checkin_status != 'cancelled'""",
+              (start_date, end_date, start_date, end_date))
+    repeat_stats = dict_row(c.fetchone())
+
+    c.execute("""SELECT cou.id, cou.name,
+                    COUNT(DISTINCT au.id) as total_clients,
+                    COUNT(DISTINCT CASE WHEN EXISTS (
+                        SELECT 1 FROM appointments a2 
+                        WHERE a2.anonymous_user_id = au.id 
+                        AND a2.counselor_id = cou.id
+                        AND a2.id > a1.id
+                        AND date(a2.appointment_date) BETWEEN ? AND ?
+                        AND a2.checkin_status != 'cancelled'
+                    ) THEN au.id END) as returning_clients,
+                    COUNT(DISTINCT CASE WHEN EXISTS (
+                        SELECT 1 FROM appointments a2 
+                        WHERE a2.anonymous_user_id = au.id 
+                        AND a2.counselor_id != cou.id
+                        AND a2.id > a1.id
+                        AND date(a2.appointment_date) BETWEEN ? AND ?
+                        AND a2.checkin_status != 'cancelled'
+                    ) THEN au.id END) as transferred_clients
+                 FROM counselors cou
+                 JOIN appointments a1 ON cou.id = a1.counselor_id
+                 JOIN anonymous_users au ON a1.anonymous_user_id = au.id
+                 WHERE date(a1.appointment_date) BETWEEN ? AND ?
+                   AND a1.checkin_status = 'checked_in'
+                   AND cou.is_active = 1
+                 GROUP BY cou.id
+                 ORDER BY returning_clients DESC""",
+              (start_date, end_date, start_date, end_date, start_date, end_date))
+    counselor_rebook = dict_rows(c.fetchall())
+
+    for cr in counselor_rebook:
+        total = cr['total_clients'] or 0
+        cr['return_rate'] = round(cr['returning_clients'] / total * 100, 1) if total > 0 else 0
+        cr['transfer_rate'] = round(cr['transferred_clients'] / total * 100, 1) if total > 0 else 0
+
+    total_users = basic_stats.get('total_anonymous_users', 0) if basic_stats else 0
+    repeat_users = repeat_stats.get('repeat_users', 0) if repeat_stats else 0
+    rebook_rate = round(repeat_users / total_users * 100, 1) if total_users > 0 else 0
+
+    c.execute("""SELECT 
+                    CAST((julianday(a2.appointment_date) - julianday(a1.appointment_date)) AS INTEGER) as days_diff,
+                    COUNT(*) as count
+                 FROM appointments a1
+                 JOIN appointments a2 ON a1.anonymous_user_id = a2.anonymous_user_id 
+                    AND a2.id > a1.id
+                 WHERE date(a1.appointment_date) BETWEEN ? AND ?
+                   AND date(a2.appointment_date) BETWEEN ? AND ?
+                   AND a1.checkin_status = 'checked_in'
+                   AND a2.checkin_status != 'cancelled'
+                 GROUP BY days_diff
+                 ORDER BY days_diff
+                 LIMIT 30""",
+              (start_date, end_date, start_date, end_date))
+    interval_dist = dict_rows(c.fetchall())
+
+    avg_days = 0
+    total_intervals = sum(d['count'] for d in interval_dist)
+    if total_intervals > 0:
+        weighted_sum = sum(d['days_diff'] * d['count'] for d in interval_dist)
+        avg_days = round(weighted_sum / total_intervals, 1)
+
+    c.execute("""SELECT 
+                    strftime('%Y-%m', a1.appointment_date) as month,
+                    COUNT(DISTINCT a1.anonymous_user_id) as new_clients,
+                    COUNT(DISTINCT CASE WHEN EXISTS (
+                        SELECT 1 FROM appointments a2 
+                        WHERE a2.anonymous_user_id = a1.anonymous_user_id 
+                        AND a2.appointment_date < a1.appointment_date
+                        AND a2.checkin_status != 'cancelled'
+                    ) THEN a1.anonymous_user_id END) as returning_clients
+                 FROM appointments a1
+                 WHERE date(a1.appointment_date) BETWEEN ? AND ?
+                   AND a1.checkin_status = 'checked_in'
+                 GROUP BY month
+                 ORDER BY month""",
+              (start_date, end_date))
+    monthly_trend = dict_rows(c.fetchall())
+
+    for m in monthly_trend:
+        total = m['new_clients'] + m['returning_clients']
+        m['new_ratio'] = round(m['new_clients'] / total * 100, 1) if total > 0 else 0
+        m['return_ratio'] = round(m['returning_clients'] / total * 100, 1) if total > 0 else 0
+
+    conn.close()
+
+    return {
+        'total_users': total_users,
+        'repeat_users': repeat_users,
+        'rebook_rate': rebook_rate,
+        'total_appointments': basic_stats.get('total_appointments', 0) if basic_stats else 0,
+        'attended_appointments': basic_stats.get('attended_appointments', 0) if basic_stats else 0,
+        'counselor_rebook': counselor_rebook,
+        'interval_distribution': interval_dist,
+        'avg_interval_days': avg_days,
+        'monthly_trend': monthly_trend,
+    }
+
+def check_create_followup_supervision(survey_id):
+    grade_result = grade_followup_abnormal(survey_id)
+    if not grade_result or grade_result['grade'] == 'normal':
+        return None
+
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM followup_surveys WHERE id = ?", (survey_id,))
+    survey = dict_row(c.fetchone())
+    conn.close()
+
+    if not survey:
+        return None
+
+    task_type = 'followup_' + grade_result['grade']
+    title = f'回访异常{grade_result["grade"] == "critical" and "紧急" or grade_result["grade"] == "important" and "重要" or "一般"}处理'
+    description = '；'.join(grade_result['reasons'])
+
+    task_id, task_no = create_supervision_task(
+        task_type=task_type,
+        priority=grade_result['priority'],
+        title=title,
+        description=description,
+        anonymous_user_id=survey.get('anonymous_user_id'),
+        anonymous_code=survey.get('anonymous_code'),
+        appointment_id=survey.get('appointment_id'),
+        followup_survey_id=survey_id,
+    )
+
+    return task_id, task_no
+
+def check_deadline_reminders():
+    from config import SUPERVISION_REMINDER_INTERVAL_HOURS
+    conn = get_conn()
+    c = conn.cursor()
+
+    now = datetime.now()
+    upcoming_deadline = (now + timedelta(hours=SUPERVISION_REMINDER_INTERVAL_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
+
+    c.execute("""SELECT st.*, u.real_name as assignee_name
+                 FROM supervision_tasks st
+                 JOIN users u ON st.assigned_to = u.id
+                 WHERE st.status IN ('pending', 'in_progress')
+                   AND st.assigned_to IS NOT NULL
+                   AND st.deadline <= ?
+                   AND st.last_reminder_sent IS NULL 
+                    OR (st.last_reminder_sent IS NOT NULL 
+                        AND (strftime('%s', ?) - strftime('%s', st.last_reminder_sent)) / 3600 >= ?)""",
+              (upcoming_deadline, now.strftime('%Y-%m-%d %H:%M:%S'), SUPERVISION_REMINDER_INTERVAL_HOURS))
+
+    tasks = dict_rows(c.fetchall())
+
+    for task in tasks:
+        is_overdue = task['deadline'] and task['deadline'] < now.strftime('%Y-%m-%d %H:%M:%S')
+        title = is_overdue and f'督办任务已超时：{task["title"]}' or f'督办任务即将到期：{task["title"]}'
+        content = f'任务编号：{task["task_no"]}\n' + (is_overdue and f'已超时，请尽快处理！' or f'即将在{SUPERVISION_REMINDER_INTERVAL_HOURS}小时内到期，请及时处理。')
+
+        c.execute("""INSERT INTO notifications (user_id, notification_type, title, content)
+                     VALUES (?, 'deadline_reminder', ?, ?)""",
+                  (task['assigned_to'], title, content))
+
+        c.execute("UPDATE supervision_tasks SET last_reminder_sent = ? WHERE id = ?",
+                  (now.strftime('%Y-%m-%d %H:%M:%S'), task['id']))
+
+    conn.commit()
+    conn.close()
+    return len(tasks)
+
+def get_quality_overview(start_date, end_date):
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("""SELECT 
+                    COUNT(*) as total_surveys,
+                    AVG(satisfaction_score) as avg_satisfaction,
+                    SUM(CASE WHEN satisfaction_score >= 4 THEN 1 ELSE 0 END) as satisfied,
+                    SUM(CASE WHEN is_abnormal = 1 THEN 1 ELSE 0 END) as abnormal,
+                    SUM(CASE WHEN is_high_risk = 1 THEN 1 ELSE 0 END) as high_risk,
+                    SUM(CASE WHEN rebook_willingness = 'yes' THEN 1 ELSE 0 END) as rebook_yes
+                 FROM followup_surveys
+                 WHERE date(created_at) BETWEEN ? AND ?""",
+              (start_date, end_date))
+    followup_stats = dict_row(c.fetchone())
+
+    c.execute("""SELECT 
+                    COUNT(*) as total_tasks,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN status = 'completed' AND completed_at <= deadline THEN 1 ELSE 0 END) as on_time,
+                    AVG(CASE WHEN status = 'completed' 
+                        THEN (julianday(completed_at) - julianday(created_at)) * 24 
+                        ELSE NULL END) as avg_completion_hours
+                 FROM supervision_tasks
+                 WHERE date(created_at) BETWEEN ? AND ?""",
+              (start_date, end_date))
+    supervision_stats = dict_row(c.fetchone())
+
+    c.execute("""SELECT 
+                    COUNT(*) as total_archives,
+                    SUM(CASE WHEN is_closed = 1 THEN 1 ELSE 0 END) as closed
+                 FROM intervention_archives
+                 WHERE date(created_at) BETWEEN ? AND ?""",
+              (start_date, end_date))
+    archive_stats = dict_row(c.fetchone())
+
+    c.execute("""SELECT 
+                    COUNT(*) as total_trackings,
+                    SUM(CASE WHEN is_closed = 0 THEN 1 ELSE 0 END) as active,
+                    SUM(CASE WHEN is_closed = 1 THEN 1 ELSE 0 END) as closed
+                 FROM high_risk_tracking
+                 WHERE date(created_at) BETWEEN ? AND ?""",
+              (start_date, end_date))
+    tracking_stats = dict_row(c.fetchone())
+
+    conn.close()
+
+    total_surveys = followup_stats.get('total_surveys', 0) if followup_stats else 0
+    total_tasks = supervision_stats.get('total_tasks', 0) if supervision_stats else 0
+    completed_tasks = supervision_stats.get('completed') if supervision_stats else None
+    on_time_tasks = supervision_stats.get('on_time') if supervision_stats else None
+    
+    if total_surveys is None: total_surveys = 0
+    if total_tasks is None: total_tasks = 0
+    if completed_tasks is None: completed_tasks = 0
+    if on_time_tasks is None: on_time_tasks = 0
+    
+    avg_satisfaction = followup_stats.get('avg_satisfaction') if followup_stats else None
+    if avg_satisfaction is None: avg_satisfaction = 0
+    
+    satisfied = followup_stats.get('satisfied') if followup_stats else 0
+    if satisfied is None: satisfied = 0
+    
+    abnormal = followup_stats.get('abnormal') if followup_stats else 0
+    if abnormal is None: abnormal = 0
+    
+    high_risk = followup_stats.get('high_risk') if followup_stats else 0
+    if high_risk is None: high_risk = 0
+    
+    rebook_yes = followup_stats.get('rebook_yes') if followup_stats else 0
+    if rebook_yes is None: rebook_yes = 0
+    
+    avg_completion_hours = supervision_stats.get('avg_completion_hours') if supervision_stats else None
+    if avg_completion_hours is None: avg_completion_hours = 0
+
+    return {
+        'total_appointments': total_surveys,
+        'avg_satisfaction': round(avg_satisfaction, 2),
+        'rebook_rate': round(rebook_yes / total_surveys * 100, 1) if total_surveys > 0 else 0,
+        'followup': {
+            'total': total_surveys,
+            'avg_satisfaction': round(avg_satisfaction, 2),
+            'satisfaction_rate': round(satisfied / total_surveys * 100, 1) if total_surveys > 0 else 0,
+            'abnormal_rate': round(abnormal / total_surveys * 100, 1) if total_surveys > 0 else 0,
+            'high_risk_rate': round(high_risk / total_surveys * 100, 1) if total_surveys > 0 else 0,
+            'rebook_rate': round(rebook_yes / total_surveys * 100, 1) if total_surveys > 0 else 0,
+        },
+        'supervision': {
+            'total': total_tasks,
+            'completed': completed_tasks,
+            'completion_rate': round(completed_tasks / total_tasks * 100, 1) if total_tasks > 0 else 0,
+            'on_time_rate': round(on_time_tasks / completed_tasks * 100, 1) if completed_tasks > 0 else 0,
+            'avg_completion_hours': round(avg_completion_hours, 1),
+        },
+        'archives': {
+            'total': archive_stats.get('total', 0) if archive_stats else 0,
+            'closed': archive_stats.get('closed', 0) if archive_stats else 0,
+            'close_rate': round((archive_stats.get('closed') or 0) / (archive_stats.get('total') or 1) * 100, 1),
+        },
+        'tracking': {
+            'total': tracking_stats.get('total', 0) if tracking_stats else 0,
+            'active': tracking_stats.get('active', 0) if tracking_stats else 0,
+            'closed': tracking_stats.get('closed', 0) if tracking_stats else 0,
+        }
+    }

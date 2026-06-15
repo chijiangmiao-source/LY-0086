@@ -1,0 +1,180 @@
+{% extends "_base_app.html" %}
+{% block title %}干预结果归档 - 心理咨询室管理系统{% endblock %}
+{% block page_title %}<i class="bi bi-folder2-open me-1"></i>干预结果归档 · 全流程质量闭环{% endblock %}
+{% block content %}
+
+<div class="row mb-4 g-3">
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#eef2ff;color:#5e81ac;"><i class="bi bi-folder2"></i></div><div class="stat-value">{{ stats.total or 0 }}</div><div class="stat-label">归档总数</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#dbeafe;color:#3b82f6;"><i class="bi bi-folder-symlink"></i></div><div class="stat-value">{{ (stats.total or 0) - (stats.closed or 0) }}</div><div class="stat-label">进行中</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#ecfdf5;color:#10b981;"><i class="bi bi-folder-check"></i></div><div class="stat-value">{{ stats.closed or 0 }}</div><div class="stat-label">已结案</div></div></div>
+  <div class="col-md-3"><div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:#d97706;"><i class="bi bi-percent"></i></div><div class="stat-value">{% if stats.total %}{{ (stats.closed / stats.total * 100)|round(1) }}{% else %}0{% endif %}%</div><div class="stat-label">结案率</div></div></div>
+</div>
+
+<div class="card-panel mb-4">
+  <div class="card-header"><div><h6 class="mb-0"><i class="bi bi-filter me-1"></i>筛选条件</h6></div></div>
+  <div class="card-body">
+    <form method="get" class="row g-3">
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">状态</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="all" {% if status_filter=='all' %}selected{% endif %}>全部</option>
+          <option value="open" {% if status_filter=='open' %}selected{% endif %}>进行中</option>
+          <option value="closed" {% if status_filter=='closed' %}selected{% endif %}>已结案</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">干预类型</label>
+        <select name="type" class="form-select form-select-sm">
+          <option value="all" {% if type_filter=='all' %}selected{% endif %}>全部类型</option>
+          {% for k, v in type_labels.items() %}
+          <option value="{{ k }}" {% if type_filter==k %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">干预级别</label>
+        <select name="level" class="form-select form-select-sm">
+          <option value="all" {% if level_filter=='all' %}selected{% endif %}>全部级别</option>
+          {% for k, v in level_labels.items() %}
+          <option value="{{ k }}" {% if level_filter==k %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">匿名编码</label>
+        <input type="text" name="code" class="form-control form-control-sm" value="{{ anonymous_code }}" placeholder="输入匿名编码">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">日期范围</label>
+        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+      </div>
+      <div class="col-md-2 d-flex align-items-end gap-2">
+        <button type="submit" class="btn btn-primary-bs btn-sm"><i class="bi bi-search"></i> 筛选</button>
+        <a href="/intervention-archives" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg"></i> 重置</a>
+        {% if can_manage %}
+        <a href="/api/intervention-archives/export?date_from={{ date_from }}&date_to={{ date_to }}" class="btn btn-success btn-sm"><i class="bi bi-download"></i> 导出</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card-panel">
+  <div class="card-header">
+    <div><h6 class="mb-0"><i class="bi bi-list-task me-1"></i>归档列表</h6></div>
+    <div class="text-secondary small">共 {{ archives|length }} 条记录</div>
+  </div>
+  <div class="card-body p-0">
+    {% if archives %}
+    <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="font-size:14px;">
+      <thead class="table-light">
+        <tr>
+          <th>归档编号</th>
+          <th>匿名用户</th>
+          <th>干预类型</th>
+          <th>干预级别</th>
+          <th>咨询师</th>
+          <th>状态</th>
+          <th>创建时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in archives %}
+        <tr>
+          <td><code style="font-size:11px;">{{ a.archive_no }}</code></td>
+          <td><code class="small">{{ a.masked_code }}</code></td>
+          <td><small>{{ type_labels.get(a.intervention_type, a.intervention_type) }}</small></td>
+          <td>
+            {% if a.intervention_level == 'critical' %}<span class="badge bg-danger">危急</span>
+            {% elif a.intervention_level == 'severe' %}<span class="badge bg-warning text-dark">重度</span>
+            {% elif a.intervention_level == 'moderate' %}<span class="badge bg-info">中度</span>
+            {% elif a.intervention_level == 'mild' %}<span class="badge bg-secondary">轻度</span>
+            {% else %}<span class="badge bg-light text-dark">-</span>{% endif %}
+          </td>
+          <td><small>{{ a.counselor_name or '-' }}</small></td>
+          <td>
+            {% if a.is_closed %}<span class="badge badge-checked">已结案</span>
+            {% else %}<span class="badge badge-pending">进行中</span>{% endif %}
+          </td>
+          <td><small class="text-secondary">{{ a.created_at[:10] if a.created_at else '-' }}</small></td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary" onclick="viewArchive({{ a.id }})"><i class="bi bi-eye"></i> 详情</button>
+            {% if can_manage and not a.is_closed %}
+            <button class="btn btn-sm btn-outline-success" onclick="closeArchive({{ a.id }})"><i class="bi bi-check2-circle"></i> 结案</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-secondary"><i class="bi bi-folder-x" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">暂无归档记录</div></div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function viewArchive(id) {
+  fetch('/api/intervention-archives?id=' + id)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.archive) {
+        var a = data.archive;
+        var typeLabels = {'crisis_intervention':'危机干预','followup_intervention':'回访干预','noshow_intervention':'失约干预','risk_intervention':'风险干预','consultation':'咨询辅导','referral':'转介','other':'其他'};
+        var levelLabels = {'mild':'轻度','moderate':'中度','severe':'重度','critical':'危急'};
+        
+        var methodsHtml = '-';
+        if (a.parsed_methods && a.parsed_methods.length > 0) {
+          methodsHtml = a.parsed_methods.map(function(m) { return '<span class="schedule-tag">' + m + '</span>'; }).join('');
+        }
+        
+        var html = '<div class="row g-2 mb-3">' +
+          '<div class="col-6"><small class="text-secondary">归档编号</small><div style="font-weight:600;">' + a.archive_no + '</div></div>' +
+          '<div class="col-6"><small class="text-secondary">状态</small><div>' + (a.is_closed ? '已结案' : '进行中') + '</div></div>' +
+          '<div class="col-6"><small class="text-secondary">干预类型</small><div>' + (typeLabels[a.intervention_type] || a.intervention_type) + '</div></div>' +
+          '<div class="col-6"><small class="text-secondary">干预级别</small><div>' + (levelLabels[a.intervention_level] || a.intervention_level || '-') + '</div></div>' +
+          '<div class="col-12"><small class="text-secondary">干预方法</small><div>' + methodsHtml + '</div></div>' +
+          '<div class="col-12"><small class="text-secondary">干预内容</small><div style="white-space:pre-wrap;">' + (a.intervention_content || '-') + '</div></div>' +
+          '<div class="col-12"><small class="text-secondary">干预效果</small><div style="white-space:pre-wrap;">' + (a.intervention_effect || '-') + '</div></div>' +
+          '<div class="col-12"><small class="text-secondary">后续计划</small><div style="white-space:pre-wrap;">' + (a.follow_up_plan || '-') + '</div></div>' +
+          '<div class="col-6"><small class="text-secondary">关联预约</small><div>' + (a.appointment_no || '-') + '</div></div>' +
+          '<div class="col-6"><small class="text-secondary">创建时间</small><div>' + (a.created_at || '-') + '</div></div>' +
+          '</div>';
+        
+        if (a.is_closed) {
+          html += '<div class="border-top pt-3 mt-2">' +
+            '<small class="text-secondary">结案备注</small><div style="white-space:pre-wrap;">' + (a.closing_remark || '-') + '</div>' +
+            '<small class="text-secondary">结案时间</small><div>' + (a.closed_at || '-') + '</div>' +
+            '</div>';
+        }
+        
+        openModal('归档详情 - ' + a.archive_no, html, 'lg');
+      }
+    });
+}
+
+function closeArchive(id) {
+  var html = '<div class="mb-3"><label class="form-label">结案备注</label><textarea id="closeRemark" class="form-control" rows="3" placeholder="请填写结案说明"></textarea></div>' +
+    '<div class="text-end"><button class="btn btn-success" onclick="doClose(' + id + ')">确认结案</button></div>';
+  openModal('结案归档', html);
+}
+
+function doClose(id) {
+  var remark = document.getElementById('closeRemark').value;
+  if (!remark) { toastMsg('请填写结案备注', 'error'); return; }
+  
+  fetch('/api/intervention-archives/close', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({archive_id: id, closing_remark: remark})
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { toastMsg('结案成功'); setTimeout(function(){ location.reload(); }, 800); }
+      else { toastMsg(d.error || '操作失败', 'error'); }
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,194 @@
+{% extends "_base_app.html" %}
+{% block title %}高风险个案跟踪 - 心理咨询室管理系统{% endblock %}
+{% block page_title %}<i class="bi bi-person-bounding-box me-1"></i>高风险个案持续跟踪台账{% endblock %}
+{% block content %}
+
+<div class="row mb-4 g-3">
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#fee2e2;color:#dc2626;"><i class="bi bi-exclamation-triangle-fill"></i></div><div class="stat-value">{{ summary.high_risk or 0 }}</div><div class="stat-label">高风险</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:#d97706;"><i class="bi bi-exclamation-triangle"></i></div><div class="stat-value">{{ summary.medium_risk or 0 }}</div><div class="stat-label">中风险</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#dbeafe;color:#3b82f6;"><i class="bi bi-eye"></i></div><div class="stat-value">{{ summary.monitoring or 0 }}</div><div class="stat-label">跟踪观察</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#fce7f3;color:#db2777;"><i class="bi bi-activity"></i></div><div class="stat-value">{{ summary.intervening or 0 }}</div><div class="stat-label">干预中</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#ecfdf5;color:#10b981;"><i class="bi bi-check2-circle"></i></div><div class="stat-value">{{ summary.closed or 0 }}</div><div class="stat-label">已结案</div></div></div>
+  <div class="col-md-2"><div class="stat-card"><div class="stat-icon" style="background:#fef9c3;color:#ca8a04;"><i class="bi bi-bell"></i></div><div class="stat-value">{{ summary.followup_due or 0 }}</div><div class="stat-label">待随访</div></div></div>
+</div>
+
+<div class="card-panel mb-4">
+  <div class="card-header"><div><h6 class="mb-0"><i class="bi bi-filter me-1"></i>筛选条件</h6></div></div>
+  <div class="card-body">
+    <form method="get" class="row g-3">
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">状态</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="all" {% if status_filter=='all' %}selected{% endif %}>全部状态</option>
+          <option value="active" {% if status_filter=='active' %}selected{% endif %}>进行中</option>
+          <option value="closed" {% if status_filter=='closed' %}selected{% endif %}>已结案</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-secondary">风险等级</label>
+        <select name="risk" class="form-select form-select-sm">
+          <option value="all" {% if risk_filter=='all' %}selected{% endif %}>全部等级</option>
+          <option value="high" {% if risk_filter=='high' %}selected{% endif %}>高风险</option>
+          <option value="medium" {% if risk_filter=='medium' %}selected{% endif %}>中风险</option>
+          <option value="low" {% if risk_filter=='low' %}selected{% endif %}>低风险</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">匿名编码</label>
+        <input type="text" name="code" class="form-control form-control-sm" value="{{ anonymous_code }}" placeholder="输入匿名编码搜索">
+      </div>
+      <div class="col-md-3 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary-bs btn-sm"><i class="bi bi-search"></i> 筛选</button>
+        <a href="/high-risk-tracking" class="btn btn-outline-secondary btn-sm ms-2"><i class="bi bi-x-lg"></i> 重置</a>
+        {% if can_manage %}
+        <button type="button" class="btn btn-success btn-sm ms-2" onclick="openCreateModal()"><i class="bi bi-plus-circle"></i> 新建</button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card-panel">
+  <div class="card-header">
+    <div><h6 class="mb-0"><i class="bi bi-list-task me-1"></i>跟踪台账列表</h6></div>
+    <div class="text-secondary small">共 {{ trackings|length }} 条记录</div>
+  </div>
+  <div class="card-body p-0">
+    {% if trackings %}
+    <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="font-size:14px;">
+      <thead class="table-light">
+        <tr>
+          <th>跟踪编号</th>
+          <th>匿名用户</th>
+          <th>风险等级</th>
+          <th>状态</th>
+          <th>负责咨询师</th>
+          <th>督导</th>
+          <th>随访次数</th>
+          <th>上次随访</th>
+          <th>下次随访</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in trackings %}
+        <tr {% if t.is_followup_due and not t.is_closed %}style="background:#fffbeb;"{% endif %}>
+          <td><code style="font-size:11px;">{{ t.tracking_no }}</code></td>
+          <td><code class="small">{{ t.masked_code }}</code></td>
+          <td>
+            {% if t.risk_level == 'high' %}<span class="badge risk-high">高风险</span>
+            {% elif t.risk_level == 'medium' %}<span class="badge risk-medium">中风险</span>
+            {% else %}<span class="badge risk-low">低风险</span>{% endif %}
+          </td>
+          <td>
+            {% if t.current_status == 'monitoring' %}<span class="badge bg-info">跟踪观察</span>
+            {% elif t.current_status == 'intervening' %}<span class="badge bg-warning text-dark">干预中</span>
+            {% elif t.current_status == 'recovering' %}<span class="badge bg-success">恢复期</span>
+            {% elif t.current_status == 'closed' %}<span class="badge bg-secondary">已结案</span>
+            {% else %}<span class="badge bg-light text-dark">{{ t.current_status }}</span>{% endif %}
+          </td>
+          <td><small>{{ t.counselor_name or '-' }}</small></td>
+          <td><small>{{ t.supervisor_name or '-' }}</small></td>
+          <td><small>{{ t.followup_count or 0 }} 次</small></td>
+          <td><small class="text-secondary">{{ t.last_followup_date or '-' }}</small></td>
+          <td>
+            {% if t.is_closed %}
+              <small class="text-success">已结案</small>
+            {% elif t.is_followup_due %}
+              <small class="text-danger fw-bold">已到期</small>
+            {% else %}
+              <small class="text-info">{{ t.days_until_followup }}天后</small>
+            {% endif %}
+          </td>
+          <td>
+            <a href="/high-risk-tracking/{{ t.id }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i> 详情</a>
+            {% if can_manage and not t.is_closed %}
+            <button class="btn btn-sm btn-outline-success" onclick="addFollowup({{ t.id }})"><i class="bi bi-chat-dots"></i> 随访</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-secondary"><i class="bi bi-person-x" style="font-size:48px;opacity:0.3;"></i><div class="mt-3">暂无高风险跟踪记录</div></div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function addFollowup(id) {
+  var html = '<div class="mb-3"><label class="form-label">随访内容</label><textarea id="followupContent" class="form-control" rows="4" placeholder="请输入随访记录"></textarea></div>' +
+    '<div class="row g-2 mb-3">' +
+    '<div class="col-6"><label class="form-label small">情绪评分(1-10)</label><input type="number" id="moodScore" class="form-control form-control-sm" min="1" max="10" value="5"></div>' +
+    '<div class="col-6"><label class="form-label small">风险评估</label><select id="riskAssessment" class="form-select form-select-sm"><option value="high">高风险</option><option value="medium">中风险</option><option value="low">低风险</option></select></div>' +
+    '</div>' +
+    '<div class="text-end"><button class="btn btn-success" onclick="doFollowup(' + id + ')">保存随访</button></div>';
+  openModal('添加随访记录', html);
+}
+
+function doFollowup(id) {
+  var content = document.getElementById('followupContent').value;
+  var moodScore = document.getElementById('moodScore').value;
+  var riskAssessment = document.getElementById('riskAssessment').value;
+  if (!content) { toastMsg('请输入随访内容', 'error'); return; }
+  
+  fetch('/api/high-risk-tracking/log', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({tracking_id: id, log_type: 'followup', content: content, mood_score: moodScore, risk_assessment: riskAssessment})
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { toastMsg('随访记录已保存'); setTimeout(function(){ location.reload(); }, 800); }
+      else { toastMsg(d.error || '操作失败', 'error'); }
+    });
+}
+
+function openCreateModal() {
+  var counselors = {{ counselors|tojson }};
+  var supervisors = {{ supervisors|tojson }};
+  
+  var couHtml = '<option value="">请选择</option>';
+  counselors.forEach(function(c) { couHtml += '<option value="' + c.id + '">' + c.name + '</option>'; });
+  
+  var supHtml = '<option value="">请选择</option>';
+  supervisors.forEach(function(s) { supHtml += '<option value="' + s.id + '">' + s.real_name + '</option>'; });
+  
+  var html = '<div class="mb-2"><label class="form-label small">匿名用户ID</label><input type="text" id="hrUserId" class="form-control form-control-sm" placeholder="匿名用户ID"></div>' +
+    '<div class="mb-2"><label class="form-label small">匿名编码</label><input type="text" id="hrCode" class="form-control form-control-sm" placeholder="匿名编码"></div>' +
+    '<div class="mb-2"><label class="form-label small">初始风险原因</label><textarea id="hrReason" class="form-control form-control-sm" rows="2" placeholder="请输入风险原因"></textarea></div>' +
+    '<div class="row g-2 mb-2">' +
+    '<div class="col-6"><label class="form-label small">负责咨询师</label><select id="hrCounselor" class="form-select form-select-sm">' + couHtml + '</select></div>' +
+    '<div class="col-6"><label class="form-label small">督导</label><select id="hrSupervisor" class="form-select form-select-sm">' + supHtml + '</select></div>' +
+    '</div>' +
+    '<div class="text-end"><button class="btn btn-primary-bs btn-sm" onclick="doCreate()">建立台账</button></div>';
+  
+  openModal('建立高风险跟踪台账', html);
+}
+
+function doCreate() {
+  var data = {
+    anonymous_user_id: document.getElementById('hrUserId').value,
+    anonymous_code: document.getElementById('hrCode').value,
+    initial_risk_reason: document.getElementById('hrReason').value,
+    assigned_counselor_id: document.getElementById('hrCounselor').value,
+    assigned_supervisor_id: document.getElementById('hrSupervisor').value,
+  };
+  if (!data.anonymous_user_id || !data.anonymous_code) {
+    toastMsg('请填写匿名用户信息', 'error'); return;
+  }
+  
+  fetch('/api/high-risk-tracking', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { toastMsg('台账建立成功'); setTimeout(function(){ location.reload(); }, 800); }
+      else { toastMsg(d.error || '创建失败', 'error'); }
+    });
+}
+</script>
+{% endblock %}

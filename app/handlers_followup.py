@@ -8,10 +8,11 @@ from app.database import (
     add_followup_question, update_followup_question,
     get_eligible_appointments_for_followup, submit_followup_survey,
     get_followup_surveys, get_followup_survey_by_appointment,
-    mark_followup_abnormal,
+    mark_followup_abnormal, grade_followup_abnormal,
+    check_create_followup_supervision,
     get_satisfaction_trend, get_counselor_satisfaction_distribution,
     get_abnormal_feedback_stats, get_high_risk_followup_warnings,
-    get_followup_summary_stats
+    get_followup_summary_stats, create_high_risk_tracking,
 )
 from config import FOLLOWUP_DEFAULT_DAYS_RANGE
 
@@ -217,7 +218,23 @@ class FollowupSurveySubmitApi:
             resp.media = {'error': '提交失败，该预约已存在回访记录'}
             return
 
-        resp.media = {'success': True, 'survey_id': survey_id}
+        grade_result = grade_followup_abnormal(survey_id)
+        supervision_result = check_create_followup_supervision(survey_id)
+
+        if grade_result and grade_result['grade'] == 'critical':
+            if apt.get('anonymous_user_id'):
+                create_high_risk_tracking(
+                    anonymous_user_id=apt['anonymous_user_id'],
+                    anonymous_code=anonymous_code,
+                    initial_risk_reason=grade_result['reasons'][0] if grade_result['reasons'] else '回访高风险',
+                )
+
+        resp.media = {
+            'success': True,
+            'survey_id': survey_id,
+            'grade': grade_result['grade'] if grade_result else 'normal',
+            'has_supervision': supervision_result is not None,
+        }
 
 class FollowupDetailApi:
     def on_get(self, req, resp, survey_id):

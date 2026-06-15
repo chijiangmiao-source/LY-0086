@@ -194,9 +194,13 @@ document.addEventListener('DOMContentLoaded', function(){
     <li class="nav-item"><a href="/counselors" class="nav-link {% if nav == 'counselors' %}active{% endif %}"><i class="bi bi-people"></i> 咨询师管理</a></li>
     <li class="nav-item"><a href="/schedules" class="nav-link {% if nav == 'schedules' %}active{% endif %}"><i class="bi bi-calendar-week"></i> 排班管理</a></li>
     <li class="nav-item"><a href="/interventions" class="nav-link {% if nav == 'interventions' %}active{% endif %}"><i class="bi bi-exclamation-triangle"></i> 失约与干预</a></li>
-    <li class="nav-item"><a href="/analytics" class="nav-link {% if nav == 'analytics' %}active{% endif %}"><i class="bi bi-bar-chart-line"></i> 分析报表</a></li>
     <li class="nav-item"><a href="/followup" class="nav-link {% if nav == 'followup' or nav == 'followup_analytics' %}active{% endif %}"><i class="bi bi-chat-left-heart"></i> 回访与满意度</a></li>
+    <li class="nav-item"><a href="/supervision" class="nav-link {% if nav == 'supervision' %}active{% endif %}"><i class="bi bi-list-check"></i> 督办任务</a></li>
     <li class="nav-item"><a href="/risk-warnings" class="nav-link {% if nav == 'risk' %}active{% endif %}"><i class="bi bi-exclamation-triangle-fill"></i> 风险预警</a></li>
+    <li class="nav-item"><a href="/high-risk-tracking" class="nav-link {% if nav == 'high_risk' %}active{% endif %}"><i class="bi bi-person-bounding-box"></i> 高风险跟踪</a></li>
+    <li class="nav-item"><a href="/intervention-archives" class="nav-link {% if nav == 'archives' %}active{% endif %}"><i class="bi bi-folder2-open"></i> 干预归档</a></li>
+    <li class="nav-item"><a href="/quality-analytics" class="nav-link {% if nav == 'quality_analytics' or nav == 'quality' or nav == 'rebook' %}active{% endif %}"><i class="bi bi-graph-up-arrow"></i> 质量分析</a></li>
+    <li class="nav-item"><a href="/analytics" class="nav-link {% if nav == 'analytics' %}active{% endif %}"><i class="bi bi-bar-chart-line"></i> 分析报表</a></li>
     <li class="nav-item"><a href="/notifications" class="nav-link {% if nav == 'notifications' %}active{% endif %}" style="position:relative;"><i class="bi bi-bell"></i> 消息通知 <span id="nav-notif-badge"></span></a></li>
   </ul>
   <div class="px-3 py-3 mt-3 border-top border-white border-opacity-10">

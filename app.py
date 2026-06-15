@@ -23,6 +23,17 @@ from app.handlers_followup import (FollowupPage, FollowupSurveyPage, FollowupSur
                                     FollowupQuestionsApi, FollowupQuestionUpdateApi,
                                     FollowupAnalyticsPage, FollowupAnalyticsExportApi)
 
+from app.handlers_supervision import (SupervisionPage, SupervisionApi,
+                                       SupervisionStatusApi, SupervisionAssignApi,
+                                       SupervisionSummaryApi)
+from app.handlers_archives import (InterventionArchivesPage, InterventionArchiveApi,
+                                    InterventionArchiveCloseApi, InterventionArchiveExportApi)
+from app.handlers_high_risk import (HighRiskTrackingPage, HighRiskTrackingDetailPage,
+                                     HighRiskTrackingApi, HighRiskTrackingLogApi,
+                                     HighRiskTrackingCloseApi, HighRiskTrackingSummaryApi)
+from app.handlers_quality import (QualityComparisonPage, RebookAnalysisPage,
+                                   QualityAnalyticsPage, QualityExportApi, RebookExportApi)
+
 def create_app():
     init_db()
 
@@ -91,6 +102,30 @@ def create_app():
     app.add_route('/api/followup/questions/{question_id:int}', FollowupQuestionUpdateApi())
     app.add_route('/followup/analytics', FollowupAnalyticsPage())
     app.add_route('/api/followup/analytics/export', FollowupAnalyticsExportApi())
+
+    app.add_route('/supervision', SupervisionPage())
+    app.add_route('/api/supervision', SupervisionApi())
+    app.add_route('/api/supervision/status', SupervisionStatusApi())
+    app.add_route('/api/supervision/assign', SupervisionAssignApi())
+    app.add_route('/api/supervision/summary', SupervisionSummaryApi())
+
+    app.add_route('/intervention-archives', InterventionArchivesPage())
+    app.add_route('/api/intervention-archives', InterventionArchiveApi())
+    app.add_route('/api/intervention-archives/close', InterventionArchiveCloseApi())
+    app.add_route('/api/intervention-archives/export', InterventionArchiveExportApi())
+
+    app.add_route('/high-risk-tracking', HighRiskTrackingPage())
+    app.add_route('/high-risk-tracking/{tracking_id:int}', HighRiskTrackingDetailPage())
+    app.add_route('/api/high-risk-tracking', HighRiskTrackingApi())
+    app.add_route('/api/high-risk-tracking/log', HighRiskTrackingLogApi())
+    app.add_route('/api/high-risk-tracking/close', HighRiskTrackingCloseApi())
+    app.add_route('/api/high-risk-tracking/summary', HighRiskTrackingSummaryApi())
+
+    app.add_route('/quality-comparison', QualityComparisonPage())
+    app.add_route('/rebook-analysis', RebookAnalysisPage())
+    app.add_route('/quality-analytics', QualityAnalyticsPage())
+    app.add_route('/api/quality/export', QualityExportApi())
+    app.add_route('/api/rebook/export', RebookExportApi())
 
     return app
 
