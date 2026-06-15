@@ -1,37 +1,16 @@
 import falcon
-import json
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from app.templates import render_template
-from app.database import (
-    get_conn, dict_rows, dict_row, has_permission,
-    create_high_risk_tracking, get_high_risk_trackings, get_high_risk_tracking,
-    add_high_risk_tracking_log, close_high_risk_tracking,
-    get_high_risk_tracking_summary,
-)
+from app.services.high_risk_service import HighRiskService
+from app.services.permission_service import PermissionService
+from app.utils.response import set_html_response
+from app.utils.exceptions import AppException, handle_exception
 
-def require_permission(req, resp, permission):
-    user = req.context.user
-    if not user:
-        resp.status = falcon.HTTP_401
-        resp.content_type = 'application/json'
-        resp.text = '{"error": "未登录"}'
-        return False
-    if not has_permission(user['role'], permission):
-        resp.status = falcon.HTTP_403
-        resp.content_type = 'application/json'
-        resp.text = '{"error": "权限不足"}'
-        return False
-    return True
 
 class HighRiskTrackingPage:
     def on_get(self, req, resp):
-        user = req.context.user
-        if not has_permission(user['role'], 'view_high_risk_tracking'):
-            resp.status = falcon.HTTP_403
-            resp.text = '权限不足'
-            return
-
-        can_manage = has_permission(user['role'], 'manage_high_risk_tracking')
+        user = PermissionService.require_permission(req, 'view_high_risk_tracking')
+        can_manage = PermissionService.can(req, 'manage_high_risk_tracking')
 
         status_filter = req.get_param('status') or 'all'
         risk_filter = req.get_param('risk') or 'all'
@@ -47,16 +26,11 @@ class HighRiskTrackingPage:
         if anonymous_code:
             filters['anonymous_code'] = anonymous_code
 
-        trackings = get_high_risk_trackings(filters, limit=100)
-        summary = get_high_risk_tracking_summary()
-
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute("SELECT id, name FROM counselors WHERE is_active = 1 ORDER BY name")
-        counselors = dict_rows(c.fetchall())
-        c.execute("SELECT id, real_name, role FROM users WHERE role IN ('admin', 'intervention') ORDER BY real_name")
-        supervisors = dict_rows(c.fetchall())
-        conn.close()
+        trackings = HighRiskService.get_trackings(filters, limit=100)
+        trackings = HighRiskService.enrich_trackings(trackings)
+        summary = HighRiskService.get_summary()
+        counselors = HighRiskService.get_counselors()
+        supervisors = HighRiskService.get_supervisors()
 
         status_labels = {
             'monitoring': '跟踪观察',
@@ -70,8 +44,7 @@ class HighRiskTrackingPage:
             'low': '低风险',
         }
 
-        resp.content_type = 'text/html; charset=utf-8'
-        resp.text = render_template('high_risk_tracking.html', {
+        set_html_response(resp, render_template('high_risk_tracking.html', {
             'user': user,
             'trackings': trackings,
             'summary': summary,
@@ -85,23 +58,15 @@ class HighRiskTrackingPage:
             'risk_labels': risk_labels,
             'nav': 'high_risk',
             'year': datetime.now().year,
-        })
+        }))
+
 
 class HighRiskTrackingDetailPage:
     def on_get(self, req, resp, tracking_id):
-        user = req.context.user
-        if not has_permission(user['role'], 'view_high_risk_tracking'):
-            resp.status = falcon.HTTP_403
-            resp.text = '权限不足'
-            return
-
-        can_manage = has_permission(user['role'], 'manage_high_risk_tracking')
-        tracking = get_high_risk_tracking(int(tracking_id))
-
-        if not tracking:
-            resp.status = falcon.HTTP_404
-            resp.text = '跟踪记录不存在'
-            return
+        user = PermissionService.require_permission(req, 'view_high_risk_tracking')
+        can_manage = PermissionService.can(req, 'manage_high_risk_tracking')
+        tracking = HighRiskService.get_tracking_detail(tracking_id)
+        tracking = HighRiskService.enrich_tracking_detail(tracking)
 
         status_labels = {
             'monitoring': '跟踪观察',
@@ -123,16 +88,7 @@ class HighRiskTrackingDetailPage:
             'close': '结案',
         }
 
-        if tracking.get('anonymous_code') and len(tracking['anonymous_code']) > 6:
-            tracking['masked_code'] = tracking['anonymous_code'][:4] + '***' + tracking['anonymous_code'][-2:]
-        else:
-            tracking['masked_code'] = tracking['anonymous_code'][:3] + '***' if tracking.get('anonymous_code') else '***'
-
-        for log in tracking.get('logs', []):
-            log['type_label'] = log_type_labels.get(log.get('log_type', ''), log.get('log_type', ''))
-
-        resp.content_type = 'text/html; charset=utf-8'
-        resp.text = render_template('high_risk_detail.html', {
+        set_html_response(resp, render_template('high_risk_detail.html', {
             'user': user,
             'tracking': tracking,
             'can_manage': can_manage,
@@ -141,121 +97,92 @@ class HighRiskTrackingDetailPage:
             'log_type_labels': log_type_labels,
             'nav': 'high_risk',
             'year': datetime.now().year,
-        })
+        }))
+
 
 class HighRiskTrackingApi:
     def on_get(self, req, resp):
-        if not require_permission(req, resp, 'view_high_risk_tracking'):
-            return
-        tracking_id = req.get_param('id')
-        if tracking_id:
-            tracking = get_high_risk_tracking(int(tracking_id))
-            if not tracking:
-                resp.status = falcon.HTTP_404
-                resp.media = {'error': '跟踪记录不存在'}
-                return
-            resp.media = {'tracking': tracking}
-        else:
-            trackings = get_high_risk_trackings(limit=50)
-            resp.media = {'trackings': trackings}
+        try:
+            PermissionService.require_permission(req, 'view_high_risk_tracking')
+            tracking_id = req.get_param('id')
+            if tracking_id:
+                tracking = HighRiskService.get_tracking_detail(tracking_id)
+                tracking = HighRiskService.enrich_tracking_detail(tracking)
+                resp.media = {'tracking': tracking}
+            else:
+                trackings = HighRiskService.get_trackings(limit=50)
+                trackings = HighRiskService.enrich_trackings(trackings)
+                resp.media = {'trackings': trackings}
+        except AppException as e:
+            handle_exception(req, resp, e, None)
 
     def on_post(self, req, resp):
-        if not require_permission(req, resp, 'manage_high_risk_tracking'):
-            return
-        user = req.context.user
-        form = req.get_media() or {}
+        try:
+            user = PermissionService.require_permission(req, 'manage_high_risk_tracking')
+            form = req.get_media() or {}
 
-        anonymous_user_id = form.get('anonymous_user_id')
-        anonymous_code = form.get('anonymous_code', '')
-        initial_risk_reason = (form.get('initial_risk_reason') or '').strip()
-        assigned_counselor_id = form.get('assigned_counselor_id')
-        assigned_supervisor_id = form.get('assigned_supervisor_id') or user['user_id']
+            anonymous_user_id = form.get('anonymous_user_id')
+            anonymous_code = form.get('anonymous_code', '')
+            initial_risk_reason = (form.get('initial_risk_reason') or '').strip()
+            assigned_counselor_id = form.get('assigned_counselor_id')
+            assigned_supervisor_id = form.get('assigned_supervisor_id') or user['user_id']
 
-        if not anonymous_user_id or not anonymous_code:
-            resp.status = falcon.HTTP_400
-            resp.media = {'error': '缺少匿名用户信息'}
-            return
+            tracking_id, tracking_no = HighRiskService.create_tracking(
+                anonymous_user_id=anonymous_user_id,
+                anonymous_code=anonymous_code,
+                initial_risk_reason=initial_risk_reason,
+                assigned_counselor_id=assigned_counselor_id,
+                assigned_supervisor_id=assigned_supervisor_id,
+            )
+            resp.media = {'success': True, 'tracking_id': tracking_id, 'tracking_no': tracking_no}
+        except AppException as e:
+            handle_exception(req, resp, e, None)
 
-        tracking_id, tracking_no = create_high_risk_tracking(
-            anonymous_user_id=anonymous_user_id,
-            anonymous_code=anonymous_code,
-            initial_risk_reason=initial_risk_reason,
-            assigned_counselor_id=assigned_counselor_id,
-            assigned_supervisor_id=assigned_supervisor_id,
-        )
-
-        resp.media = {'success': True, 'tracking_id': tracking_id, 'tracking_no': tracking_no}
 
 class HighRiskTrackingLogApi:
     def on_post(self, req, resp):
-        if not require_permission(req, resp, 'manage_high_risk_tracking'):
-            return
-        user = req.context.user
-        form = req.get_media() or {}
+        try:
+            user = PermissionService.require_permission(req, 'manage_high_risk_tracking')
+            form = req.get_media() or {}
 
-        tracking_id = form.get('tracking_id')
-        log_type = form.get('log_type', 'note')
-        content = (form.get('content') or '').strip()
-        mood_score = form.get('mood_score')
-        risk_assessment = form.get('risk_assessment')
+            tracking_id = form.get('tracking_id')
+            log_type = form.get('log_type', 'note')
+            content = (form.get('content') or '').strip()
+            mood_score = form.get('mood_score')
+            risk_assessment = form.get('risk_assessment')
 
-        if not tracking_id:
-            resp.status = falcon.HTTP_400
-            resp.media = {'error': '缺少跟踪记录ID'}
-            return
+            HighRiskService.add_log(
+                tracking_id=tracking_id,
+                operator_id=user['user_id'],
+                log_type=log_type,
+                content=content,
+                mood_score=mood_score,
+                risk_assessment=risk_assessment,
+            )
+            resp.media = {'success': True}
+        except AppException as e:
+            handle_exception(req, resp, e, None)
 
-        if mood_score:
-            try:
-                mood_score = int(mood_score)
-            except (ValueError, TypeError):
-                mood_score = None
-
-        success = add_high_risk_tracking_log(
-            tracking_id=int(tracking_id),
-            operator_id=user['user_id'],
-            log_type=log_type,
-            content=content,
-            mood_score=mood_score,
-            risk_assessment=risk_assessment,
-        )
-
-        if not success:
-            resp.status = falcon.HTTP_404
-            resp.media = {'error': '跟踪记录不存在'}
-            return
-
-        resp.media = {'success': True}
 
 class HighRiskTrackingCloseApi:
     def on_post(self, req, resp):
-        if not require_permission(req, resp, 'manage_high_risk_tracking'):
-            return
-        user = req.context.user
-        form = req.get_media() or {}
-        tracking_id = form.get('tracking_id')
-        closing_reason = (form.get('closing_reason') or '').strip()
+        try:
+            user = PermissionService.require_permission(req, 'manage_high_risk_tracking')
+            form = req.get_media() or {}
+            tracking_id = form.get('tracking_id')
+            closing_reason = (form.get('closing_reason') or '').strip()
 
-        if not tracking_id:
-            resp.status = falcon.HTTP_400
-            resp.media = {'error': '缺少跟踪记录ID'}
-            return
+            HighRiskService.close_tracking(tracking_id, user['user_id'], closing_reason)
+            resp.media = {'success': True}
+        except AppException as e:
+            handle_exception(req, resp, e, None)
 
-        if not closing_reason:
-            resp.status = falcon.HTTP_400
-            resp.media = {'error': '请填写结案原因'}
-            return
-
-        success = close_high_risk_tracking(int(tracking_id), user['user_id'], closing_reason)
-        if not success:
-            resp.status = falcon.HTTP_404
-            resp.media = {'error': '跟踪记录不存在'}
-            return
-
-        resp.media = {'success': True}
 
 class HighRiskTrackingSummaryApi:
     def on_get(self, req, resp):
-        if not require_permission(req, resp, 'view_high_risk_tracking'):
-            return
-        summary = get_high_risk_tracking_summary()
-        resp.media = {'summary': summary}
+        try:
+            PermissionService.require_permission(req, 'view_high_risk_tracking')
+            summary = HighRiskService.get_summary()
+            resp.media = {'summary': summary}
+        except AppException as e:
+            handle_exception(req, resp, e, None)
